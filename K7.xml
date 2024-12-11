@@ -1,0 +1,2138 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ModelInfo>
+
+    <LODS>
+        <!-- Highest LOD -->
+        <!-- minimum display size in % (should be bounding sphere vertical screen size, sphere will often be slightly larger than you expect) -->
+        <!-- default minSize is 0 -->
+        <LOD minSize="150" ModelFile="K7_LOD00.gltf"/>
+
+    </LODS>
+
+    <!-- HANDLING ###################################-->
+
+    <Behaviors>
+        <Include ModelBehaviorFile="Asobo\Common.xml"/>
+        <Include ModelBehaviorFile="Asobo\Generic.xml"/>
+
+<!-- ****************** -->
+<!-- COMMON UPDATE CODE -->
+<!-- ****************** -->
+    <Component ID="B21_UPDATE_CODE">
+        <UseTemplate Name="ASOBO_GT_Update">
+            <FREQUENCY>30</FREQUENCY>
+            <UPDATE_CODE>
+                1 (&gt;Z:B21_UNITS_METRIC)
+                (A:TITLE,string)  lc '(imp' sstr 0 &gt;= if{
+                    0 (&gt;Z:B21_UNITS_METRIC)
+                    0.514444 (&gt;Z:B21_MACCREADY_DELTA_MS)
+                }
+
+                (A:SPOILERS HANDLE POSITION, percent) d 5 &gt; if{
+                    (L:B21_SPOILERS_PERCENT) 5 &lt;= if{
+                        (L:SOUND_SPOILERS_OPEN) ! (&gt;L:SOUND_SPOILERS_OPEN)
+                    }
+                } els{
+                    (L:B21_SPOILERS_PERCENT) 5 &gt; if{
+                        (L:SOUND_SPOILERS_CLOSE) ! (&gt;L:SOUND_SPOILERS_CLOSE)
+                    }
+                }
+                (&gt;L:B21_SPOILERS_PERCENT)
+
+                (A:BRAKE PARKING INDICATOR, boolean) if{
+                    1 (&gt;K:PARKING_BRAKES,number)
+                }
+
+                (A:SPOILERS HANDLE POSITION, percent) d 50 &gt; if{
+                    (A:SIM ON GROUND, boolean) if{
+                        50 - 50 / 32766 *  16383 - d
+                            (&gt;K:AXIS_LEFT_BRAKE_SET, number)
+                            (&gt;K:AXIS_RIGHT_BRAKE_SET, number)                        }
+                } els{
+                        -16363 (&gt;K:AXIS_LEFT_BRAKE_SET, number)
+                        -16383 (&gt;K:AXIS_RIGHT_BRAKE_SET, number)
+                }
+
+                (A:CANOPY OPEN, percent over 100) d d (L:B21_CANOPY_TARGET, boolean) &lt; if{
+                    (E:ABSOLUTE TIME, seconds) (L:ABSOLUTE_TIME_PREV, seconds) - 0.1 min 0.5 *
+                    + 1 min (&gt;A:CANOPY OPEN, percent over 100)
+                } els{
+                    (L:B21_CANOPY_TARGET, boolean) &gt; if{
+                        (E:ABSOLUTE TIME, seconds) (L:ABSOLUTE_TIME_PREV, seconds) - 0.1 min 0.5 *
+                        - 0 max (&gt;A:CANOPY OPEN, percent over 100)
+                    }
+                }
+
+                (A:CANOPY OPEN, percent) 5 &gt; if{
+                    (L:CANOPY_PERCENT_PREV) 5 &lt;= if{
+                        (L:SOUND_CANOPY_OPEN) ! (&gt;L:SOUND_CANOPY_OPEN)
+                    }
+                } els{
+                    (L:CANOPY_PERCENT_PREV) 5 &gt; if{
+                        (L:SOUND_CANOPY_CLOSE) ! (&gt;L:SOUND_CANOPY_CLOSE)
+                    }
+                }
+                (A:CANOPY OPEN, percent) (&gt;L:CANOPY_PERCENT_PREV)
+
+                (L:DV_FRONT_OPEN) 0 == if{
+                    0 (&gt;L:SOUND_VOL_DV_FRONT_OPEN)
+                } els{
+                    (A:AIRSPEED TRUE, kph) 150 / 1 min (&gt;L:SOUND_VOL_DV_FRONT_OPEN)
+                }
+
+                (L:DV_BACK_OPEN) 0 == if{
+                    0 (&gt;L:SOUND_VOL_DV_BACK_OPEN)
+                } els{
+                    (A:AIRSPEED TRUE, kph) 150 / 1 min (&gt;L:SOUND_VOL_DV_BACK_OPEN)
+                }
+
+                (A:SPOILERS HANDLE POSITION, percent over 100) (A:AIRSPEED TRUE, knots) 100 / 1 min * (&gt;L:SOUND_VOL_SPOILERS)
+
+                (L:B21_AIRSPEED_SMOOTHED_MS) 0.995 * (A:AIRSPEED TRUE, meters per second) 0.005 * + d (&gt;L:B21_AIRSPEED_SMOOTHED_MS) d (&gt;L:B21_GLIDE_AIRSPEED_MS)
+                (L:B21_TE_SMOOTHED_MS) 0.995 * (L:B21_TE_MS) 0.005 * + d (&gt;L:B21_TE_SMOOTHED_MS) d (&gt;L:B21_GLIDE_TE_MS)
+                / neg 100 min d 0 &lt;= if{ 100 } d (&gt;L:B21_GLIDE_RATIO) (&gt;A:EXTERNAL SYSTEM VALUE, number)
+
+                (E:ABSOLUTE TIME, seconds) (&gt;L:ABSOLUTE_TIME_PREV, seconds)
+
+                (A:RELATIVE WIND VELOCITY BODY X, meters per second) sqr
+                (A:RELATIVE WIND VELOCITY BODY Z, meters per second) sqr
+                sqrt (&gt;L:B21_WIND_MS)
+
+                1 (&gt;O:INIT_COMPLETE)
+            </UPDATE_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ****************************************************************************************** -->
+<!--        TOTAL ENERGY VARIO CALCULATION - OUTPUTS L:B21_TE_MS                                -->
+<!-- ****************************************************************************************** -->
+    <Component ID="B21_TOTAL_ENERGY_VARIO_CALCULATION">
+        <UseTemplate Name="ASOBO_GT_Update">
+            <FREQUENCY>20</FREQUENCY><!-- Update once per second -->
+            <UPDATE_CODE>
+                (O:B21_VARIO_INIT) 1 == if{
+
+                    (E:SIMULATION TIME, seconds) d
+                    (L:B21_VARIO_TIME_PREV_S) - d
+                    0 == if{ quit }
+                    (&gt;L:B21_VARIO_TIME_DELTA_S)
+                    (&gt;L:B21_VARIO_TIME_PREV_S)
+
+                    (L:B21_VARIO_TIME_DELTA_S) 1 /
+                    0 max 1 min
+                    (&gt;L:B21_VARIO_COMP_SMOOTHING)
+
+                    (A:AIRSPEED TRUE, meters per second) sqr (L:B21_VARIO_SPEED2_PREV_MS) - (&gt;L:B21_VARIO_SPEED2_DELTA_MS)
+                    (L:B21_VARIO_SPEED2_DELTA_MS) 19.62 / (L:B21_VARIO_TIME_DELTA_S) /
+                    -40 max 40 min
+                    (L:B21_VARIO_COMP_SMOOTHING) * (O:B21_VARIO_COMP_MS) 1 (L:B21_VARIO_COMP_SMOOTHING) - * +
+                    (&gt;O:B21_VARIO_COMP_MS)
+
+                    (L:B21_VARIO_TIME_DELTA_S) 1 / 0 max 1 min (&gt;L:B21_VARIO_VSI_SMOOTHING)
+                    (A:PLANE ALTITUDE, meters) (L:B21_VARIO_ALT_PREV_M) - (L:B21_VARIO_TIME_DELTA_S) /
+                    (L:B21_VARIO_VSI_SMOOTHING) * (O:B21_VARIO_VSI_MS) 1 (L:B21_VARIO_VSI_SMOOTHING) - * +
+                    -40 max 40 min
+                    (&gt;O:B21_VARIO_VSI_MS)
+
+                    (O:B21_VARIO_VSI_MS) (O:B21_VARIO_COMP_MS) + d
+                    (&gt;L:B21_VARIO_TE_MS)
+                    -8 max 8 min
+                    (A:AIRSPEED TRUE, meters per second) 10 &lt; if{
+                        0
+                    } els{
+                        (A:AIRSPEED TRUE, meters per second) 20 &lt; if{
+                            (A:AIRSPEED TRUE, meters per second) 10 - 10 / *
+                        }
+                    }
+                    (&gt;L:B21_TE_MS)
+
+                    (A:AIRSPEED TRUE, meters per second) sqr (&gt;L:B21_VARIO_SPEED2_PREV_MS)
+                    (A:PLANE ALTITUDE, meters) (&gt;L:B21_VARIO_ALT_PREV_M)
+                } els{
+                    1 (&gt;O:B21_VARIO_INIT)
+                    0 (&gt;O:B21_VARIO_COMP_MS)
+                    0 (&gt;O:B21_VARIO_VSI_MS)
+
+                    (A:AIRSPEED TRUE, meters per second) sqr (&gt;L:B21_VARIO_SPEED2_PREV_MS)
+                    (A:PLANE ALTITUDE, meters) (&gt;L:B21_VARIO_ALT_PREV_M)
+                    (E:SIMULATION TIME, seconds) (&gt;L:B21_VARIO_TIME_PREV_S)
+                }
+
+            </UPDATE_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ****************************************************************************************** -->
+<!--        APPLY WHEELBRAKE AT 50% SPOILERS                                                    -->
+<!-- ****************************************************************************************** -->
+
+    <Component ID="B21_SPOILERS_WHEELBRAKE">
+        <UseTemplate Name="ASOBO_GT_Update">
+            <FREQUENCY>20</FREQUENCY><!-- Update once per second -->
+            <UPDATE_CODE>
+                (A:SPOILERS HANDLE POSITION, percent over 100) d 0.5 &gt; if{
+                    0.5 - 2 * 32766 * 16383 - (&gt;K:AXIS_LEFT_BRAKE_SET)
+                } els{
+                    16383 neg (&gt;K:AXIS_LEFT_BRAKE_SET)
+                }
+            </UPDATE_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ***************************** -->
+<!-- RUDDER WAGGLE CALL TOW PLANE  -->
+<!-- ***************************** -->
+
+    <Component ID="CALL_TOW_PLANE">
+        <UseTemplate Name="ASOBO_GT_Update">
+            <FREQUENCY>30</FREQUENCY>
+            <UPDATE_CODE>
+                (A:SIM ON GROUND, Bool) ! if{
+                    quit
+                }
+
+                (A:TOW CONNECTION, Bool) if{
+                    quit
+                }
+
+                (O:DIRECTION) 1 != if{
+                    (A:RUDDER DEFLECTION PCT, percent over 100) 0.7 &gt; if{
+                        (O:WAGGLE_COUNT) 1 + (&gt;O:WAGGLE_COUNT)
+                        1 (&gt;O:DIRECTION)
+                    }
+                }
+
+                (O:DIRECTION) 2 != if{
+                    (A:RUDDER DEFLECTION PCT, percent over 100) 0.7 neg &lt; if{
+                        (O:WAGGLE_COUNT) 0 == if{
+                            (E:SIMULATION TIME,seconds) (&gt;O:WAGGLE_START_S)
+                        }
+                        (O:WAGGLE_COUNT) 1 + (&gt;O:WAGGLE_COUNT)
+                        2 (&gt;O:DIRECTION)
+                    }
+                }
+
+                (E:SIMULATION TIME,seconds) (O:WAGGLE_START_S) - 5 &gt; if{
+                    0 (&gt;O:WAGGLE_COUNT)
+                    0 (&gt;O:DIRECTION)
+                }
+                (O:WAGGLE_COUNT) 3 &gt; if{
+                    (L:SOUND_CALLING_LAUNCH) ! (&gt;L:SOUND_CALLING_LAUNCH)
+                    1 if{ 1 (&gt;K:TOW_PLANE_REQUEST) }
+                    0 (&gt;O:WAGGLE_COUNT)
+                }
+            </UPDATE_CODE>
+        </UseTemplate>
+    </Component>
+
+        <!-- ****************************************************************************************** -->
+        <!--        B21_SOUND_VARIO_MS calculation                                                      -->
+        <!-- ****************************************************************************************** -->
+
+        <Component ID="B21_SOUND_VARIO_MS_CALCULATION">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>20</FREQUENCY><!-- Updates per second -->
+                <UPDATE_CODE>
+                    (L:B21_TE_MS) (&gt;L:B21_SOUND_VARIO_MS)
+
+                    0 (&gt;L:B21_SOUND_VARIO_ENABLE)
+                    (L:B21_TE_MS) 0.25 &gt; if{
+                        (A:VARIOMETER SWITCH, Bool) if{
+                            1 (&gt;L:B21_SOUND_VARIO_ENABLE)
+                        }
+                    }
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+
+        <!-- ****************************************************************************************** -->
+        <!--        NETTO VARIO CALCULATION - OUTPUTS L:B21_NETTO_MS                                    -->
+        <!-- Uses quadratic polar_sink_ms = Ax^2+Bx+C where x = true airspeed kph (sink +ve)            -->
+        <!-- ****************************************************************************************** -->
+
+        <Component ID="B21_NETTO_VARIO_CALCULATION">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>20</FREQUENCY><!-- Updates per second -->
+                <UPDATE_CODE>
+                    0.000384525 (&gt;O:A)
+                    0.0512567 neg (&gt;O:B)
+                    2.48712 (&gt;O:C)
+
+                    (A:AIRSPEED TRUE,kph) sqr (O:A) *
+                    (A:AIRSPEED TRUE,kph) (O:B) * +
+                    (O:C) +
+
+                    0.8 max 8 min
+
+                    (L:B21_TE_MS) +
+
+                    (A:AIRSPEED TRUE, meters per second) 10 &lt; if{
+                        0
+                    } els{
+                        (A:AIRSPEED TRUE, meters per second) 20 &lt; if{
+                            (A:AIRSPEED TRUE, meters per second) 10 - 10 / *
+                        }
+                    }
+
+                    (&gt;L:B21_NETTO_MS)
+
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ********************************************************************** -->
+        <!-- WINCH UPDATE CODE     -->
+        <!-- Controlled by winch.js: -->
+        <!--  (L:B21_WINCH_LEVEL_WINGS) true => set wings level -->
+        <!--  (L:B21_WINCH_PULL) true => apply velocity adjust -->
+        <!--  (L:B21_WINCH_PULL_MS) target for (VELOCITY BODY Z, meters per second) -->
+        <!-- ********************************************************************** -->
+
+        <Component ID="B21_WINCH">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>30</FREQUENCY>
+                <UPDATE_CODE>
+                    (O:TIME_PREV_S) 0 == if{
+                        (E:SIMULATION TIME, seconds) (&gt;O:TIME_PREV_S)
+                        quit
+                    }
+
+                    (L:B21_WINCH_LEVEL_WINGS, boolean) if{
+                        (A:PLANE BANK DEGREES, degrees) 0.97 * (&gt;A:PLANE BANK DEGREES, degrees)
+                    }
+
+                    (L:B21_WINCH_PULL, boolean) if{
+                        (L:B21_WINCH_PULL_MS, meters per second) (A:VELOCITY BODY Z, meters per second) - d
+                        0 &gt; if{
+                            0.5 * (E:SIMULATION TIME, seconds) (O:TIME_PREV_S) - 0.05 min *
+                            (A:VELOCITY BODY Z, meters per second) + (&gt;A:VELOCITY BODY Z, meters per second)
+                        }
+                    }
+
+                    (E:SIMULATION TIME, seconds) (&gt;O:TIME_PREV_S)
+
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ********************** -->
+        <!-- MSFS TRIM AXIS BUGFIX  -->
+        <!-- ********************** -->
+
+        <!-- This is a NULL component purely to have Asobo reverse the direction of the elevator trim input -->
+        <Component ID="REVERSE_TRIM_FIX" Node="Baroknob-back">
+            <UseTemplate Name="ASOBO_HANDLING_Wheel_ElevatorTrim_Template">
+                <!--<ANIM_NAME>Baroknob-back_Action</ANIM_NAME>
+                <NODE_ID>Baroknob-back</NODE_ID>-->
+                <INCREMENT>300</INCREMENT>
+            </UseTemplate>
+        </Component>
+
+        <!-- ###############################################-->
+        <!-- ######### RADIO SWITCH  BOX #################-->
+        <!-- ###############################################-->
+
+        <Component ID="Radio_Box" Node="radio_switch_box">
+            <UseTemplate Name="ASOBO_GT_MouseRect">
+                <TOOLTIPID>VARIO SOUND IS %((A:VARIOMETER SWITCH, Bool))%{if}ON%{else}OFF%{end}</TOOLTIPID>
+                <CURSOR>Hand</CURSOR>
+                <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+                <CALLBACKCODE_DEFAULT_IM>
+                    (M:Event) 'LeftSingle' scmi 0 == if{
+                        1 (&gt;K:TOGGLE_VARIOMETER_SWITCH)
+                        (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    }
+                </CALLBACKCODE_DEFAULT_IM>
+            </UseTemplate>
+        </Component>
+
+        <!-- ###############################################-->
+        <!-- ######### VSI SWITCH  BOX     #################-->
+        <!-- ###############################################-->
+
+        <Component ID="VSI_Switch_Box" Node="VSI_switch_box">
+            <UseTemplate Name="ASOBO_GT_MouseRect">
+                <TOOLTIPID>Gauge is %((L:REAR_VSI_TE_SWITCH, number))%{if}TE%{else}VSI%{end}</TOOLTIPID>
+                <CURSOR>Hand</CURSOR>
+                <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+                <CALLBACKCODE_DEFAULT_IM>
+                    (M:Event) 'LeftSingle' scmi 0 == if{
+                        (L:REAR_VSI_TE_SWITCH, number) ! (&gt;L:REAR_VSI_TE_SWITCH, number)
+                        (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    }
+                </CALLBACKCODE_DEFAULT_IM>
+            </UseTemplate>
+        </Component>
+
+        <!-- #######################################################-->
+        <!-- ######### MICROPHONE FRONT AND REAR   #################-->
+        <!-- #######################################################-->
+
+        <Component ID="MIKE_FRONT" Node="Mikrofon_Front">
+            <UseTemplate Name="ASOBO_GT_MouseRect">
+                <TOOLTIPID>ATC</TOOLTIPID>
+                <CURSOR>Hand</CURSOR>
+                <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+                <CALLBACKCODE_DEFAULT_IM>
+                    (M:Event) 'LeftSingle' scmi 0 == if{ 1 (&gt;K:ATC, boolean) (L:B21_ATC, boolean) ! (&gt;L:B21_ATC, boolean) }
+                </CALLBACKCODE_DEFAULT_IM>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="MIKE_REAR" Node="Mikrofon_Back">
+            <UseTemplate Name="ASOBO_GT_MouseRect">
+                <TOOLTIPID>ATC</TOOLTIPID>
+                <CURSOR>Hand</CURSOR>
+                <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+                <CALLBACKCODE_DEFAULT_IM>
+                    (M:Event) 'LeftSingle' scmi 0 == if{ 1 (&gt;K:ATC, boolean) (L:B21_ATC, boolean) ! (&gt;L:B21_ATC, boolean) }
+                </CALLBACKCODE_DEFAULT_IM>
+            </UseTemplate>
+        </Component>
+
+<!-- ############################################-->
+<!-- ######### TRIM LEVER       #################-->
+<!-- ############################################-->
+
+    <!-- TRIM LEVER P1 -->
+
+    <Component ID="p1_trim_lever" Node="ELEVATOR_TRIM_Lever_001">
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+            <PART_ID>p1_trim_lever</PART_ID>
+            <DRAG_AXIS_SCALE>-150</DRAG_AXIS_SCALE>
+            <TOOLTIPID>TRIM UP/DOWN</TOOLTIPID>
+            <POSITION_TYPE>O</POSITION_TYPE>
+            <POSITION_VAR>Position</POSITION_VAR>
+            <AXIS>Y</AXIS>
+            <DRAG_INVERTION>1</DRAG_INVERTION>
+            <NO_ARROWS/>
+            <CURSOR>UpDownArrows</CURSOR>
+            <DELTA_MIN>0.001</DELTA_MIN>
+            <RESET_LIMITS/>
+            <SNAP_DISTANCE>1</SNAP_DISTANCE>
+            <ADJUST_RAW_DRAG_VALUE/>
+            <DRAG_VALUE_OVERRIDE/>
+            <LOCK_CODE></LOCK_CODE>
+            <UNLOCK_CODE></UNLOCK_CODE>
+            <DRAG_CODE>
+                (A:ELEVATOR TRIM INDICATOR, position 16k) 400 (O:DragScale) * + 16383 min 16383 neg max (&gt;K:ELEVATOR_TRIM_SET)
+            </DRAG_CODE>
+            <POSITIVE_AXIS_CODE>(A:ELEVATOR TRIM INDICATOR, position 16k) 701 - 16383 neg max (&gt;K:ELEVATOR_TRIM_SET)</POSITIVE_AXIS_CODE>
+            <NEGATIVE_AXIS_CODE>(A:ELEVATOR TRIM INDICATOR, position 16k) 701 + 16383 min (&gt;K:ELEVATOR_TRIM_SET)</NEGATIVE_AXIS_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="p1_trim_handle_anim">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>ELEV_TRIM_UP_DOWN001</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:ELEVATOR TRIM PCT, percent) 100 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- TRIM LEVER P2 -->
+
+    <Component ID="p2_trim_lever" Node="ELEVATOR_TRIM_Lever_002">
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+            <PART_ID>p2_trim_lever</PART_ID>
+            <DRAG_AXIS_SCALE>-150</DRAG_AXIS_SCALE>
+            <TOOLTIPID>TRIM UP/DOWN</TOOLTIPID>
+            <POSITION_TYPE>O</POSITION_TYPE>
+            <POSITION_VAR>Position</POSITION_VAR>
+            <AXIS>Y</AXIS>
+            <DRAG_INVERTION>1</DRAG_INVERTION>
+            <NO_ARROWS/>
+            <CURSOR>UpDownArrows</CURSOR>
+            <DELTA_MIN>0.001</DELTA_MIN>
+            <RESET_LIMITS/>
+            <SNAP_DISTANCE>1</SNAP_DISTANCE>
+            <ADJUST_RAW_DRAG_VALUE/>
+            <DRAG_VALUE_OVERRIDE/>
+            <LOCK_CODE></LOCK_CODE>
+            <UNLOCK_CODE></UNLOCK_CODE>
+            <DRAG_CODE>
+                (A:ELEVATOR TRIM INDICATOR, position 16k) 400 (O:DragScale) * + 16383 min 16383 neg max (&gt;K:ELEVATOR_TRIM_SET)
+            </DRAG_CODE>
+            <POSITIVE_AXIS_CODE>(A:ELEVATOR TRIM INDICATOR, position 16k) 701 - 16383 neg max (&gt;K:ELEVATOR_TRIM_SET)</POSITIVE_AXIS_CODE>
+            <NEGATIVE_AXIS_CODE>(A:ELEVATOR TRIM INDICATOR, position 16k) 701 + 16383 min (&gt;K:ELEVATOR_TRIM_SET)</NEGATIVE_AXIS_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="p2_trim_handle_anim">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>ELEV_TRIM_UP_DOWN002</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:ELEVATOR TRIM PCT, percent) 100 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="trim_cable_003">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>ELEV_TRIM_UP_DOWN003</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>(A:ELEVATOR TRIM PCT, percent) 100 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="trim_cable_004">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>ELEV_TRIM_UP_DOWN004</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>(A:ELEVATOR TRIM PCT, percent) 100 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="trim_cable_005">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>ELEV_TRIM_UP_DOWN005</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>(A:ELEVATOR TRIM PCT, percent) 100 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="trim_cable_006">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>ELEV_TRIM_UP_DOWN006</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>(A:ELEVATOR TRIM PCT, percent) 100 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ############################################## -->
+<!-- ######   ELEVATOR TRIM TAB                #### -->
+<!-- ############################################## -->
+
+    <Component ID="elevator_trim_tab01">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>elevator_trim_percent_key001</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:ELEVATOR TRIM PCT, percent) 100 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="elevator_trim_tab02">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>elevator_trim_percent_key002</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:ELEVATOR TRIM PCT, percent) 100 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+
+<!-- ############################################## -->
+<!-- ######   PANEL TRIM GAUGE                 #### -->
+<!-- ############################################## -->
+
+    <Component ID="trim_indicator">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Trim-Indicator_action</ANIM_NAME>
+            <ANIM_LENGTH>200</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:ELEVATOR TRIM PCT, percent) 100 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ****************************************************************** -->
+<!-- ********************* YAWSTRING           ************************ -->
+<!-- ****************************************************************** -->
+
+    <!-- Move yawstring in X (left-right) direction, i.e. the main movement -->
+    <!-- Writes L:YAWSTRING_X_DEG which is 0 for straight back, and up to +/- 180 deg for either side -->
+    <Component ID="yawstring_x">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yawstring_x_action</ANIM_NAME>
+            <!-- (L:YAWSTRING AIRSPEED) can be set for testing. Set to (A:AIRSPEED INDICATED, meters per second) -->
+            <!-- Jiggle range is +/- 50 -->
+            <!-- JIGGLE_SIZE is 0..1 controlling size of jiggle, 0 => no jiggle, 1 => +/- 50 -->
+            <ANIM_CODE>
+
+                0.02 (&gt;O:JIGGLE_SIZE)
+                3 (&gt;O:JIGGLE_FREQUENCY)
+
+                (O:JIGGLE_FREQUENCY) 0 &gt; if{
+                    (O:JIGGLE_SIZE) 0 &gt; if{
+                        1 (O:JIGGLE_FREQUENCY) / (&gt;O:JIGGLE_PERIOD)
+                        (E:ABSOLUTE TIME, seconds) (O:JIGGLE_PERIOD) % (O:JIGGLE_PERIOD) / d 0.5 &gt; if{ 1 r - } 4 * 1 -
+                        (O:JIGGLE_SIZE) * 50 *
+                    } els{ 0 }
+                } els{ 0 }
+                (&gt;O:JIGGLE_ANIM)
+
+                (A:SIM ON GROUND, boolean) (A:GPS GROUND SPEED, meters per second) 1 &lt; &amp;&amp; if{
+                        (O:JIGGLE_ANIM) (A:AMBIENT WIND VELOCITY, meters per second) 5 / 1 min * (&gt;O:JIGGLE_ANIM)
+                        1 (&gt;L:YAWSTRING_GROUND)
+                        (A:PLANE HEADING DEGREES TRUE, degrees)
+                        (A:AMBIENT WIND DIRECTION, degrees) -
+                        720 +
+                        360 %
+                        d 180 &gt; if{
+                            360 -
+                        }
+                } els{
+                    0 (&gt;L:YAWSTRING_GROUND)
+                    (A:RELATIVE WIND VELOCITY BODY X, meters per second)
+                    (A:RELATIVE WIND VELOCITY BODY Z, meters per second)
+                    / atg neg 57.295 *
+                }
+
+                d (&gt;L:YAWSTRING_X_DEG)
+
+                90 / 25 * 50 + (O:JIGGLE_ANIM) + 0 max 100 min
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yawstring_y">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yawstring_y_action</ANIM_NAME>
+            <ANIM_CODE>
+                0.05 (&gt;O:JIGGLE_SIZE)
+                2 (&gt;O:JIGGLE_FREQUENCY)
+
+                (A:RELATIVE WIND VELOCITY BODY X, meters per second) sqr
+                (A:RELATIVE WIND VELOCITY BODY Z, meters per second) sqr
+                sqrt
+                2 / 1 min 0.07 max (&gt;L:YAWSTRING_SPEED_FACTOR)
+
+                (O:JIGGLE_FREQUENCY) 0 &gt; if{
+                    (O:JIGGLE_SIZE) 0 &gt; if{
+                        1 (O:JIGGLE_FREQUENCY) / (&gt;O:JIGGLE_PERIOD)
+                        (E:ABSOLUTE TIME, seconds) (O:JIGGLE_PERIOD) % (O:JIGGLE_PERIOD) / d 0.5 &gt; if{ 1 r - } 4 * 1 -
+                        (O:JIGGLE_SIZE) * 50 *
+                    } els{ 0 }
+                } els{ 0 }
+                (&gt;O:JIGGLE_ANIM)
+
+                (A:SIM ON GROUND, boolean) (A:GPS GROUND SPEED, meters per second) 5 &lt; &amp;&amp; if{
+                    (O:JIGGLE_ANIM) 0.2 * (&gt;O:JIGGLE_ANIM)
+                    40
+                } els{
+                    (A:INCIDENCE ALPHA, degrees)
+                    40 +
+                }
+
+                (L:YAWSTRING_SPEED_FACTOR) *
+
+                (O:JIGGLE_ANIM) +
+
+                0 max 100 min
+                d (&gt;L:YAWSTRING_Y_ANIM)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yawstring_tip">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yawstring_tip_action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <!-- Assumes animation is 0..100 -->
+            <!-- Jiggle range is +/- 50 -->
+            <!-- JIGGLE_SIZE is 0..1 controlling size of jiggle, 0 => no jiggle, 1 => +/- 50 -->
+            <ANIM_CODE>
+                0.5 (&gt;O:JIGGLE_SIZE)
+                5 (&gt;O:JIGGLE_FREQUENCY)
+
+                (O:JIGGLE_FREQUENCY) 0 &gt; if{
+                    (O:JIGGLE_SIZE) 0 &gt; if{
+                        1 (O:JIGGLE_FREQUENCY) / (&gt;O:JIGGLE_PERIOD)
+                        (E:ABSOLUTE TIME, seconds) (O:JIGGLE_PERIOD) % (O:JIGGLE_PERIOD) / d 0.5 &gt; if{ 1 r - } 4 * 1 -
+                        (O:JIGGLE_SIZE) * 50 *
+                    } els{ 0 }
+                } els{ 0 }
+                (&gt;O:JIGGLE_ANIM)
+
+                (A:SIM ON GROUND, boolean) (A:GPS GROUND SPEED, meters per second) 1 &lt; &amp;&amp; if{
+                        (O:JIGGLE_ANIM) (A:AMBIENT WIND VELOCITY, meters per second) 5 / 1 min * (&gt;O:JIGGLE_ANIM)
+                }
+
+                (O:JIGGLE_ANIM) 50 +
+                d (&gt;L:YAWSTRING_TIP_ANIM)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ****************************************************************** -->
+<!-- ********************* YAWSTRING BACKSEAT  ************************ -->
+<!-- ****************************************************************** -->
+
+    <!-- Move yawstring in X (left-right) direction, i.e. the main movement -->
+    <!-- Writes L:YAWSTRING_X_DEG which is 0 for straight back, and up to +/- 180 deg for either side -->
+    <Component ID="yawstring_x_back">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yawstring_back_x_action</ANIM_NAME>
+            <!-- (L:YAWSTRING AIRSPEED) can be set for testing. Set to (A:AIRSPEED INDICATED, meters per second) -->
+            <!-- Jiggle range is +/- 50 -->
+            <!-- JIGGLE_SIZE is 0..1 controlling size of jiggle, 0 => no jiggle, 1 => +/- 50 -->
+            <ANIM_CODE>
+
+                0.02 (&gt;O:JIGGLE_SIZE)
+                3 (&gt;O:JIGGLE_FREQUENCY)
+
+                (O:JIGGLE_FREQUENCY) 0 &gt; if{
+                    (O:JIGGLE_SIZE) 0 &gt; if{
+                        1 (O:JIGGLE_FREQUENCY) / (&gt;O:JIGGLE_PERIOD)
+                        (E:ABSOLUTE TIME, seconds) (O:JIGGLE_PERIOD) % (O:JIGGLE_PERIOD) / d 0.5 &gt; if{ 1 r - } 4 * 1 -
+                        (O:JIGGLE_SIZE) * 50 *
+                    } els{ 0 }
+                } els{ 0 }
+                (&gt;O:JIGGLE_ANIM)
+
+                (A:SIM ON GROUND, boolean) (A:GPS GROUND SPEED, meters per second) 1 &lt; &amp;&amp; if{
+                        (O:JIGGLE_ANIM) (A:AMBIENT WIND VELOCITY, meters per second) 5 / 1 min * (&gt;O:JIGGLE_ANIM)
+                        1 (&gt;L:YAWSTRING_GROUND)
+                        (A:PLANE HEADING DEGREES TRUE, degrees)
+                        (A:AMBIENT WIND DIRECTION, degrees) -
+                        720 +
+                        360 %
+                        d 180 &gt; if{
+                            360 -
+                        }
+                } els{
+                    0 (&gt;L:YAWSTRING_GROUND)
+                    (A:RELATIVE WIND VELOCITY BODY X, meters per second)
+                    (A:RELATIVE WIND VELOCITY BODY Z, meters per second)
+                    / atg neg 57.295 *
+                }
+
+                d (&gt;L:YAWSTRING_X_DEG)
+
+                90 / 25 * 50 + (O:JIGGLE_ANIM) + 0 max 100 min
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yawstring_y_back">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yawstring_back_y_action</ANIM_NAME>
+            <ANIM_CODE>
+                0.05 (&gt;O:JIGGLE_SIZE)
+                2 (&gt;O:JIGGLE_FREQUENCY)
+
+                (A:RELATIVE WIND VELOCITY BODY X, meters per second) sqr
+                (A:RELATIVE WIND VELOCITY BODY Z, meters per second) sqr
+                sqrt
+                2 / 1 min 0.07 max (&gt;L:YAWSTRING_SPEED_FACTOR)
+
+                (O:JIGGLE_FREQUENCY) 0 &gt; if{
+                    (O:JIGGLE_SIZE) 0 &gt; if{
+                        1 (O:JIGGLE_FREQUENCY) / (&gt;O:JIGGLE_PERIOD)
+                        (E:ABSOLUTE TIME, seconds) (O:JIGGLE_PERIOD) % (O:JIGGLE_PERIOD) / d 0.5 &gt; if{ 1 r - } 4 * 1 -
+                        (O:JIGGLE_SIZE) * 50 *
+                    } els{ 0 }
+                } els{ 0 }
+                (&gt;O:JIGGLE_ANIM)
+
+                (A:SIM ON GROUND, boolean) (A:GPS GROUND SPEED, meters per second) 5 &lt; &amp;&amp; if{
+                    (O:JIGGLE_ANIM) 0.2 * (&gt;O:JIGGLE_ANIM)
+                    40
+                } els{
+                    (A:INCIDENCE ALPHA, degrees)
+                    40 +
+                }
+
+                (L:YAWSTRING_SPEED_FACTOR) *
+
+                (O:JIGGLE_ANIM) +
+
+                0 max 100 min
+                d (&gt;L:YAWSTRING_Y_ANIM)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yawstring_tip_back">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yawstring_back_tip_action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <!-- Assumes animation is 0..100 -->
+            <!-- Jiggle range is +/- 50 -->
+            <!-- JIGGLE_SIZE is 0..1 controlling size of jiggle, 0 => no jiggle, 1 => +/- 50 -->
+            <ANIM_CODE>
+                0.5 (&gt;O:JIGGLE_SIZE)
+                5 (&gt;O:JIGGLE_FREQUENCY)
+
+                (O:JIGGLE_FREQUENCY) 0 &gt; if{
+                    (O:JIGGLE_SIZE) 0 &gt; if{
+                        1 (O:JIGGLE_FREQUENCY) / (&gt;O:JIGGLE_PERIOD)
+                        (E:ABSOLUTE TIME, seconds) (O:JIGGLE_PERIOD) % (O:JIGGLE_PERIOD) / d 0.5 &gt; if{ 1 r - } 4 * 1 -
+                        (O:JIGGLE_SIZE) * 50 *
+                    } els{ 0 }
+                } els{ 0 }
+                (&gt;O:JIGGLE_ANIM)
+
+                (A:SIM ON GROUND, boolean) (A:GPS GROUND SPEED, meters per second) 1 &lt; &amp;&amp; if{
+                        (O:JIGGLE_ANIM) (A:AMBIENT WIND VELOCITY, meters per second) 5 / 1 min * (&gt;O:JIGGLE_ANIM)
+                }
+
+                (O:JIGGLE_ANIM) 50 +
+                d (&gt;L:YAWSTRING_TIP_ANIM)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ****************************************************************** -->
+<!-- ********************* ALTIMETER FRONT     ************************ -->
+<!-- ****************************************************************** -->
+
+    <Component ID="altimeter_front_big_needle">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>altitude_indicator</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>900</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:B21_UNITS_METRIC) if{
+                    (A:INDICATED ALTITUDE:1, meters) 10 / 900 + 900 %
+                } els{
+                    (A:INDICATED ALTITUDE:1, feet) 10 / 900 + 900 %
+                }
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="altimeter_front_small_needle">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>altitude_indicator_001</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>900</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:B21_UNITS_METRIC) if{
+                    (A:INDICATED ALTITUDE:1, meters) 10 /
+                } els{
+                    (A:INDICATED ALTITUDE:1, feet) 10000 % 10 /
+                }
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ****************************************************************** -->
+<!-- ********************* ALTIMETER BACK      ************************ -->
+<!-- ****************************************************************** -->
+
+    <Component ID="altimeter_back_big_needle">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>airspeed_indicator_002</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>900</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:B21_UNITS_METRIC) if{
+                    (A:INDICATED ALTITUDE:1, meters) 10 / 900 + 900 %
+                } els{
+                    (A:INDICATED ALTITUDE:1, feet) 10 / 900 + 900 %
+                }
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="altimeter_back_small_needle">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>airspeed_indicator_003</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>900</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:B21_UNITS_METRIC) if{
+                    (A:INDICATED ALTITUDE:1, meters) 10 /
+                } els{
+                    (A:INDICATED ALTITUDE:1, feet) 10000 % 10 /
+                }
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   ASI                 #### -->
+<!-- ################################# -->
+
+    <Component ID="asi_front_needle">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>airspeed_indicator</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>300</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:B21_UNITS_METRIC) if{
+                    (A:AIRSPEED INDICATED, kph) d d * 0.0022 * r 0.35 * + 23 +
+                } els{
+                    (A:AIRSPEED INDICATED, kph) d d * 0.0025 * r 0.36 * + 26 +
+                }
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="asi_back_needle">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>airspeed_indicator_001</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>300</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:B21_UNITS_METRIC) if{
+                    (A:AIRSPEED INDICATED, kph) d d * 0.0022 * r 0.35 * + 23 +
+                } els{
+                    (A:AIRSPEED INDICATED, kph) d d * 0.0025 * r 0.36 * + 26 +
+                }
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ########################################################-->
+<!-- ######### TOW RELEASE FRONT AND REAR   #################-->
+<!-- ########################################################-->
+
+    <Component ID="TOW_RELEASE_FRONT" Node="Tow_Release_001">
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>TOW RELEASE</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (A:TOW CONNECTION, Bool) if{ 1 (&gt;K:TOW_PLANE_RELEASE) (L:SOUND_CABLE_RELEASE) ! (&gt;L:SOUND_CABLE_RELEASE) }
+                els{ 1 (&gt;K:TOW_PLANE_RELEASE) (L:B21_TOW_RELEASE, boolean) ! (&gt;L:B21_TOW_RELEASE, boolean) }
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="TOW_RELEASE_REAR" Node="Tow_Release_002">
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>TOW RELEASE</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (A:TOW CONNECTION, Bool) if{ 1 (&gt;K:TOW_PLANE_RELEASE) (L:SOUND_CABLE_RELEASE) ! (&gt;L:SOUND_CABLE_RELEASE) }
+                els{ 1 (&gt;K:TOW_PLANE_RELEASE) (L:B21_TOW_RELEASE, boolean) ! (&gt;L:B21_TOW_RELEASE, boolean) }
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Tow_Release_Action">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Tow_Release_Action</ANIM_NAME>
+            <ANIM_LAG>200</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (L:B21_TOW_RELEASE, boolean) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   CANOPY              #### -->
+<!-- ################################# -->
+
+    <!-- Front canopy lever -->
+    <Component ID="CANOPY_open_close_002_mouserect" Node="CANOPY_Lever">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>CANOPY_open_close_002</ANIM_NAME>
+            <ANIM_LAG>50</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:CANOPY OPEN, percent over 100) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>Canopy open/close</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (L:B21_CANOPY_TARGET, boolean) ! (&gt;L:B21_CANOPY_TARGET, boolean)
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="CANOPY_open_close">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>CANOPY_open_close</ANIM_NAME>
+            <ANIM_LAG>50</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:CANOPY OPEN, percent over 100) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Front DV panel -->
+    <Component ID="Window-Front_action_mouserect" Node="Window-Front">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Window-Front_action</ANIM_NAME>
+            <ANIM_LAG>200</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (L:DV_FRONT_OPEN) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>DV panel open/close</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (L:DV_FRONT_OPEN) ! (&gt;L:DV_FRONT_OPEN)
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="CANOPY_open_close_003" Node="CANOPY_Lever_001">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>CANOPY_open_close_003</ANIM_NAME>
+            <ANIM_LAG>50</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:CANOPY OPEN, percent over 100) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>Canopy open/close</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (L:B21_CANOPY_TARGET, boolean) ! (&gt;L:B21_CANOPY_TARGET, boolean)
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+    <!-- Bar between front and rear canopy levers -->
+    <Component ID="CANOPY_open_close_004">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>CANOPY_open_close_004</ANIM_NAME>
+            <ANIM_LAG>50</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:CANOPY OPEN, percent over 100) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Rear canopy -->
+    <Component ID="CANOPY_open_close_001">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>CANOPY_open_close_001</ANIM_NAME>
+            <ANIM_LAG>50</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:CANOPY OPEN, percent over 100) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Rear DV panel -->
+    <Component ID="Window-Back_action" Node="Window-Back">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Window-Back_action</ANIM_NAME>
+            <ANIM_LAG>200</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (L:DV_BACK_OPEN) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>DV panel open/close</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (L:DV_BACK_OPEN) ! (&gt;L:DV_BACK_OPEN)
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+
+<!-- ################################# -->
+<!-- ######  AILERON              #### -->
+<!-- ################################# -->
+
+    <Component ID="l_aileron_percent_key">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_aileron_percent_key</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:AILERON LEFT DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_aileron_percent_key_001">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_aileron_percent_key_001</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:AILERON LEFT DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_aileron_percent_key">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_aileron_percent_key</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:AILERON RIGHT DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_aileron_percent_key_001">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_aileron_percent_key_001</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:AILERON RIGHT DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ###############################################-->
+<!-- ######### BATTERY SWITCH      #################-->
+<!-- ###############################################-->
+
+    <Component ID="Battery_Box" Node="batterie_switch_box">
+    <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>BATTERY_ON_OFF</ANIM_NAME>
+            <ANIM_LAG>400</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:ELECTRICAL MASTER BATTERY, Bool) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID>BATTERY IS %((A:ELECTRICAL MASTER BATTERY, Bool))%{if}ON%{else}OFF%{end}</TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+                (M:Event) 'LeftSingle' scmi 0 == if{
+                    1 (&gt;K:TOGGLE_MASTER_BATTERY)
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                }
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######  SPOILERS HANDLES     #### -->
+<!-- ################################# -->
+
+    <!-- P1 Spoilers Handle -->
+    <Component ID="p1_spoiler_handle" Node="FLAPS_Lever_001">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>FLAPS_UP_DOWN001</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+            <PART_ID>p1_spoiler_handle</PART_ID>
+            <DRAG_AXIS_SCALE>-150</DRAG_AXIS_SCALE>
+            <TOOLTIPID>TT:COCKPIT.TOOLTIPS.SPEEDBRAKE_LEVER</TOOLTIPID>
+            <POSITION_TYPE>O</POSITION_TYPE>
+            <POSITION_VAR>Position</POSITION_VAR>
+            <AXIS>Y</AXIS>
+            <DRAG_INVERTION>1</DRAG_INVERTION>
+            <NO_ARROWS/>
+            <CURSOR>UpDownArrows</CURSOR>
+            <DELTA_MIN>0.001</DELTA_MIN>
+            <RESET_LIMITS/>
+            <SNAP_DISTANCE>1</SNAP_DISTANCE>
+            <ADJUST_RAW_DRAG_VALUE/>
+            <DRAG_VALUE_OVERRIDE/>
+            <LOCK_CODE></LOCK_CODE>
+            <UNLOCK_CODE></UNLOCK_CODE>
+            <DRAG_CODE>
+                (A:SPOILERS HANDLE POSITION, position 16k) 100 (O:DragScale) * + 16383 min 0 max (&gt;K:SPOILERS_SET)
+            </DRAG_CODE>
+            <POSITIVE_AXIS_CODE>(A:SPOILERS HANDLE POSITION, position 16k) 701 - 0 max (&gt;K:SPOILERS_SET)</POSITIVE_AXIS_CODE>
+            <NEGATIVE_AXIS_CODE>(A:SPOILERS HANDLE POSITION, position 16k) 701 + 16383 min (&gt;K:SPOILERS_SET)</NEGATIVE_AXIS_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- P2 Spoilers Handle -->
+    <Component ID="p2_spoiler_handle" Node="FLAPS_Lever_002">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>FLAPS_UP_DOWN002</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+            <PART_ID>p1_spoiler_handle</PART_ID>
+            <DRAG_AXIS_SCALE>-150</DRAG_AXIS_SCALE>
+            <TOOLTIPID>TT:COCKPIT.TOOLTIPS.SPEEDBRAKE_LEVER</TOOLTIPID>
+            <POSITION_TYPE>O</POSITION_TYPE>
+            <POSITION_VAR>Position</POSITION_VAR>
+            <AXIS>Y</AXIS>
+            <DRAG_INVERTION>1</DRAG_INVERTION>
+            <NO_ARROWS/>
+            <CURSOR>UpDownArrows</CURSOR>
+            <DELTA_MIN>0.001</DELTA_MIN>
+            <RESET_LIMITS/>
+            <SNAP_DISTANCE>1</SNAP_DISTANCE>
+            <ADJUST_RAW_DRAG_VALUE/>
+            <DRAG_VALUE_OVERRIDE/>
+            <LOCK_CODE></LOCK_CODE>
+            <UNLOCK_CODE></UNLOCK_CODE>
+            <DRAG_CODE>
+                (A:SPOILERS HANDLE POSITION, position 16k) 100 (O:DragScale) * + 16383 min 0 max (&gt;K:SPOILERS_SET)
+            </DRAG_CODE>
+            <POSITIVE_AXIS_CODE>(A:SPOILERS HANDLE POSITION, position 16k) 701 - 0 max (&gt;K:SPOILERS_SET)</POSITIVE_AXIS_CODE>
+            <NEGATIVE_AXIS_CODE>(A:SPOILERS HANDLE POSITION, position 16k) 701 + 16383 min (&gt;K:SPOILERS_SET)</NEGATIVE_AXIS_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Spoilers bar between P1 & P2 levers -->
+    <Component ID="FLAPS_UP_DOWN003">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>FLAPS_UP_DOWN003</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Spoilers bar between P2 lever & rear fuselage -->
+    <Component ID="FLAPS_UP_DOWN004">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>FLAPS_UP_DOWN004</ANIM_NAME>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   ALTIMETER           #### -->
+<!-- # Defined in cockpit.cfg        # -->
+<!-- # index 1 = front altimeter     # -->
+<!-- # index 2 = rear altimeter      # -->
+<!-- ################################# -->
+
+
+<!-- FRONT ALTIMETER -->
+   <Component ID="Baroknob-front_Action" Node="Baroknob-front">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Baroknob-front_Action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:KOHLSMAN SETTING MB:1, millibars) 20 % 5 *
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft">
+            <TOOLTIPID>Baro</TOOLTIPID>
+            <ANTICLOCKWISE_CODE>
+                1 (&gt;L:WHEELDOWN) 1 (&gt;K:KOHLSMAN_DEC) 1 (&gt;K:KOHLSMAN_DEC) 1 (&gt;K:KOHLSMAN_DEC)
+                    1 (&gt;K:KOHLSMAN_DEC) 1 (&gt;K:KOHLSMAN_DEC) 1 (&gt;K:KOHLSMAN_DEC)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                1 (&gt;L:WHEELUP) 1 (&gt;K:KOHLSMAN_INC) 1 (&gt;K:KOHLSMAN_INC) 1 (&gt;K:KOHLSMAN_INC)
+                    1 (&gt;K:KOHLSMAN_INC) 1 (&gt;K:KOHLSMAN_INC) 1 (&gt;K:KOHLSMAN_INC)
+            </CLOCKWISE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Barodisk-front_Action">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Barodisk-front_Action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:KOHLSMAN SETTING MB:1, millibars) 930 - 1.6 /
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   RADIO               #### -->
+<!-- ################################# -->
+
+   <Component ID="COM_Volume_Knob_action" Node="COM_Volume_Knob">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM_Volume_Knob_action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:COM VOLUME:1, percent) d (&gt;L:B21_COM_VOLUME)
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft">
+            <TOOLTIPID>Volume</TOOLTIPID>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM VOLUME:1, percent) 10 - 0 max  (&gt;K:COM1_VOLUME_SET)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM VOLUME:1, percent) 10 + 100 min (&gt;K:COM1_VOLUME_SET)
+            </CLOCKWISE_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="Freq_Mhz_Knob_action" Node="Freq_Mhz_Knob">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Freq_Mhz_Knob_action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (A:COM ACTIVE FREQUENCY:1, number) 118000000 - 1000000 / 5 * 100 %
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft">
+            <TOOLTIPID>MHz</TOOLTIPID>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM ACTIVE FREQUENCY:1, number)
+                1000000 + 137000000 min
+                (&gt;K:COM_RADIO_SET_HZ)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM ACTIVE FREQUENCY:1, number)
+                1000000 + 137000000 min
+                (&gt;K:COM_RADIO_SET_HZ)
+            </CLOCKWISE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Radio KHz large change rotary knob -->
+   <Component ID="Freq_Khz_Knob002_action" Node="Freq_Khz_Knob_002">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Freq_Khz_Knob002_action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (L:B21_RADIO_KHZ_COARSE)
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft">
+            <TOOLTIPID>KHz COARSE</TOOLTIPID>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM ACTIVE FREQUENCY:1, number)
+                100000 - 118000000 max
+                (&gt;K:COM_RADIO_SET_HZ)
+                (L:B21_RADIO_KHZ_COARSE) 95 +
+                100 % (&gt;L:B21_RADIO_KHZ_COARSE)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM ACTIVE FREQUENCY:1, number)
+                100000 + 137000000 min
+                (&gt;K:COM_RADIO_SET_HZ)
+                (L:B21_RADIO_KHZ_COARSE) 5 + 100 % (&gt;L:B21_RADIO_KHZ_COARSE)
+            </CLOCKWISE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Radio KHz small change rotary knob -->
+   <Component ID="Freq_Khz_Knob001_action" Node="Freq_Khz_Knob_001">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Freq_Khz_Knob001_action</ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (L:B21_RADIO_KHZ_FINE)
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft">
+            <TOOLTIPID>KHZ FINE</TOOLTIPID>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM ACTIVE FREQUENCY:1, number) d 1000 / 100 % 0.5 + flr d
+                25 % 2 &lt;
+                if{ p 10000 }
+                els{ p 5000 }
+                -
+                118000000 max
+                (&gt;K:COM_RADIO_SET_HZ)
+                (L:B21_RADIO_KHZ_FINE) 95 + 100 % (&gt;L:B21_RADIO_KHZ_FINE)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (A:COM ACTIVE FREQUENCY:1, number) 1000 / 100 % 0.5 + flr d
+                25 % 12 &gt;
+                if{ 10000 }
+                els{ 5000 }
+                (A:COM ACTIVE FREQUENCY:1, number) +
+                137000000 min
+                (&gt;K:COM_RADIO_SET_HZ)
+                (L:B21_RADIO_KHZ_FINE) 5 + 100 % (&gt;L:B21_RADIO_KHZ_FINE)
+            </CLOCKWISE_CODE>
+        </UseTemplate>
+    </Component>
+
+
+
+<!--
+    <Component ID="">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME></ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="" Node="">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME></ANIM_NAME>
+            <ANIM_LAG>0</ANIM_LAG>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+
+            </ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_MouseRect">
+            <TOOLTIPID></TOOLTIPID>
+            <CURSOR>Hand</CURSOR>
+            <MOUSEFLAGS_DEFAULT_IM>LeftSingle</MOUSEFLAGS_DEFAULT_IM>
+            <CALLBACKCODE_DEFAULT_IM>
+
+            </CALLBACKCODE_DEFAULT_IM>
+        </UseTemplate>
+    </Component>
+
+-->
+
+
+
+<!-- ################################# -->
+<!-- ######   COMPASS             #### -->
+<!-- ################################# -->
+
+    <!-- P1 -->
+    <Component ID="compass_indicator_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>compass_indicator</ANIM_NAME>
+            <ANIM_LENGTH>360</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:WISKEY COMPASS INDICATION DEGREES, Degrees)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- P2 -->
+    <Component ID="compass_indicator_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>compass_indicator_001</ANIM_NAME>
+            <ANIM_LENGTH>360</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:WISKEY COMPASS INDICATION DEGREES, Degrees)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################## -->
+<!-- ######   VARIOS               #### -->
+<!-- ################################## -->
+
+    <!-- Front non-linear Winter -->
+    <Component ID="vertical-speed_indicator_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>vertical-speed_indicator</ANIM_NAME>
+            <ANIM_LENGTH>240</ANIM_LENGTH>
+            <ANIM_LAG>80</ANIM_LAG>
+            <ANIM_CODE>
+
+                    (L:B21_NETTO_MS)
+                    10 * 120 +
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Front linear Winter -->
+    <Component ID="vertical-speed_indicator_002_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>vertical-speed_indicator_002</ANIM_NAME>
+            <ANIM_LENGTH>240</ANIM_LENGTH>
+            <ANIM_LAG>120</ANIM_LAG>
+            <ANIM_CODE>
+
+                    (L:B21_TE_MS, meters per second)
+
+                       20 * 120 +
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Rear VSI TE switch -->
+    <Component ID="VSI-switch_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>VSI-switch_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>400</ANIM_LAG>
+            <ANIM_CODE>
+(L:REAR_VSI_TE_SWITCH, number) 100 *
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Rear non-linear Winter -->
+    <Component ID="vertical-speed_indicator_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>vertical-speed_indicator_001</ANIM_NAME>
+            <ANIM_LENGTH>240</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (L:REAR_VSI_TE_SWITCH, number) if{
+                        (L:B21_TE_MS, meters per second)
+                    } els{
+                        (A:VERTICAL SPEED, meters per second)
+                    }
+                      10 * 120 +
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ########################################## -->
+<!-- ######   ATTITUDE/TURN INDICATOR      #### -->
+<!-- ########################################## -->
+
+    <!-- Ball animation for the turn-and-slip gauge -->
+    <!-- NOTE we are using L: variable from the YAWSTRING and WINCH -->
+   <Component ID="Turn_Indicator_LR_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Turn_Indicator_LR</ANIM_NAME>
+            <ANIM_LENGTH>102</ANIM_LENGTH>
+            <ANIM_LAG>20</ANIM_LAG>
+            <ANIM_CODE>
+
+                    (L:B21_WINCH_LEVEL_WINGS, boolean) if{
+                        52
+                        quit
+                    }
+                    (A:SIM ON GROUND, boolean) if{
+                        (A:Turn Coordinator ball,percent) 2 / 52 + 2 max
+                    } els{
+                        (L:YAWSTRING_X_DEG) neg 1.5 * 52 + 2 max 102 min
+                    }
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Attitude_Indicator_LR_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Attitude_Indicator_LR</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>75</ANIM_LAG>
+            <ANIM_CODE>
+(A:ELECTRICAL MASTER BATTERY, Bool)
+                    if{ (A:PLANE BANK DEGREES, degrees) 50 + }
+                    els{ 30 }
+                    30 max 70 min
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   RADIO               #### -->
+<!-- ################################# -->
+
+    <!-- Radio power on/off switch -->
+    <Component ID="Radio_Switch_Action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Radio_Switch_Action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>400</ANIM_LAG>
+            <ANIM_CODE>
+
+                    (Z:B21_VARIO_INIT) 0 == if{
+                        1 (>Z:B21_VARIO_INIT)
+                        0 (>L:B21_VARIO_SWITCH)
+                        (A:VARIOMETER SWITCH, Bool) if{ 1 (>K:TOGGLE_VARIOMETER_SWITCH) }
+                    }
+                    (A:VARIOMETER SWITCH, Bool) 100 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="COM-Freq_Digit-1_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM-Freq_Digit-1_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:COM ACTIVE FREQUENCY:1, number) d (>L:B21_RADIO_FREQ)
+                    100000000 / flr 10 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="COM-Freq_Digit-2_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM-Freq_Digit-2_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:COM ACTIVE FREQUENCY:1, number)
+                    100000000 % 10000000 / flr 10 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="COM-Freq_Digit-3_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM-Freq_Digit-3_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:COM ACTIVE FREQUENCY:1, number)
+                    10000000 % 1000000 / flr 10 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="COM-Freq_Digit-4_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM-Freq_Digit-4_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:COM ACTIVE FREQUENCY:1, number)
+                    1000000 % 100000 / flr 10 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="COM-Freq_Digit-5_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM-Freq_Digit-5_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:COM ACTIVE FREQUENCY:1, number)
+                    100000 % 10000 / flr 10 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="COM-Freq_Digit-6_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>COM-Freq_Digit-6_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:COM ACTIVE FREQUENCY:1, number)
+                    10000 % 1000 / flr 10 *
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   STICK               #### -->
+<!-- ################################# -->
+
+    <Component ID="yoke_anim_y_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_y</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE Y POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yoke_anim_x_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_x</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE X POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yoke_anim_y_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_y_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE Y POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="yoke_anim_x_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_x_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE X POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yoke_anim_y_002_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_y_002</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE Y POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yoke_anim_x_002_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_x_002</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE X POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yoke_anim_y_003_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_y_003</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE Y POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="yoke_anim_x_003_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>yoke_anim_x_003</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:YOKE X POSITION, number) 50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   PEDALS              #### -->
+<!-- ################################# -->
+
+    <Component ID="Pedal_Front_LEFT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Pedal_Front_LEFT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Pedal_Front_RIGHT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Pedal_Front_RIGHT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Pedal_Front_LEFT_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Pedal_Front_LEFT_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Pedal_Front_RIGHT_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Pedal_Front_RIGHT_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Cable_Front_LEFT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Cable_Front_LEFT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Cable_Front_LEFT_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Cable_Front_LEFT_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Cable_Front_RIGHT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Cable_Front_RIGHT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Cable_Front_RIGHT_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Cable_Front_RIGHT_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Pedal_Back_LEFT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Pedal_Back_LEFT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Pedal_Back_RIGHT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Pedal_Back_RIGHT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Cable_Back_LEFT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Cable_Back_LEFT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Cable_Back_RIGHT_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Cable_Back_RIGHT</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ########################################################################################################## -->
+<!-- ####################### EXTERIOR ANIMATIONS                  ############################################# -->
+<!-- ########################################################################################################## -->
+
+<!-- ################################# -->
+<!-- ######   RUDDER               #### -->
+<!-- ################################# -->
+
+    <Component ID="rudder_percent_key_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>rudder_percent_key</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Rud-Stear-Cable_R_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Rud-Stear-Cable_R_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Rud-Stear-Cable_L_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Rud-Stear-Cable_L_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+(A:RUDDER DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   SPOILERS            #### -->
+<!-- ################################# -->
+
+    <Component ID="l_flap_percent_key_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_002_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_002</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_003_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_003</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_004_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_004</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_005_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_005</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_006_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_006</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="l_flap_percent_key_007_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>l_flap_percent_key_007</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_001_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_001</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_002_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_002</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_003_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_003</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_004_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_004</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_005_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_005</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_006_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_006</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="r_flap_percent_key_007_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>r_flap_percent_key_007</ANIM_NAME>
+            <ANIM_LENGTH>300</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:SPOILERS HANDLE POSITION, percent)
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   MAIN TIRE           #### -->
+<!-- ################################# -->
+
+    <Component ID="c_tire_anim_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>c_tire_anim</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+
+            <ANIM_CODE>
+
+                    (A:CENTER WHEEL ROTATION ANGLE, radians) 15.91 * 100 %
+
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+<!-- ################################# -->
+<!-- ######   ELEVATOR            #### -->
+<!-- ################################# -->
+
+    <Component ID="elevator_percent_key_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>elevator_percent_key</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>
+(A:ELEVATOR DEFLECTION PCT, percent) 2 / 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+</Behaviors>
+</ModelInfo>
