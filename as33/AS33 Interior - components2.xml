@@ -1,0 +1,1877 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ModelInfo>
+    <LODS>
+        <!-- Highest LOD -->
+        <!-- minimum display size in % (should be bounding sphere vertical screen size, sphere will often be slightly larger than you expect) -->
+        <!-- default minSize is 0 -->
+        <LOD minSize="0"     ModelFile="AS33_LOD00.gltf"/>
+    </LODS>
+
+    <Behaviors>
+        <Include ModelBehaviorFile="Asobo\Common.xml"/>
+        <Include ModelBehaviorFile="Asobo\Generic\FX.xml"/>
+        <Include ModelBehaviorFile="Asobo\Common\Inputs\Engine_Inputs.xml"/>
+
+        <!-- ****************************************************** -->
+        <!-- ****************************************************** -->
+        <!-- Behaviours INTERNAL + EXTERNAL                         -->
+        <!-- ****************************************************** -->
+        <!-- ****************************************************** -->
+
+        <Component ID="as33_ballast_init">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>30</FREQUENCY>
+                <UPDATE_CODE>
+                    (O:INIT_BALLAST) 0 == if{
+                        0 (&gt;A:LIGHT NAV:1,Bool)
+                        0 (&gt;A:LIGHT LANDING:1, Bool)
+                        0 (&gt;A:LIGHT BEACON:1, Bool)
+
+                        1 (&gt;O:INIT_BALLAST)
+                    }
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="as33_engine_init">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>1</FREQUENCY>
+                <UPDATE_CODE>
+                    (O:INIT_ENGINE) 0 == if{
+                        0 (&gt;A:LIGHT WING:1,Bool)
+
+                        1 (&gt;O:INIT_ENGINE)
+                    }
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--          SPOILERS               -->
+        <!-- ******************************* -->
+
+        <Component ID="spoilers_left_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>left_spoiler_key</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_LAG>100</ANIM_LAG>
+              <ANIM_CODE>
+                (A:SPOILERS LEFT POSITION, percent)
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="spoilers_right_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>right_spoiler_key</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_LAG>100</ANIM_LAG>
+              <ANIM_CODE>
+                (A:SPOILERS RIGHT POSITION, percent)
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--     YAW STRING                  -->
+        <!-- ******************************* -->
+
+        <Component ID="yawstring_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>YawString</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>(Z:B21_YAWSTRING_100,number)</ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ********************************************************************* -->
+        <!--     OVERSPEED                                                         -->
+        <!-- USING A TAS VNE FIGURE OF 78.25 M/S (145 knots IAS at 1000m)          -->
+        <!--                                                                       -->
+        <!-- Z:AS33_OVERSPEEDING :      1/0 whether AS33 is currently overspeed    -->
+        <!-- Z:AS33_OVERSPEED_FLEX :    -1 .. +1 for an oscillating flex amount    -->
+        <!-- Z:AS33_OVERSPEED_FADE_IN : 0..1 3-second fade-in of overspeed effects -->
+        <!-- The 'overspeed' effect starts at 82.22 m/s TRUE AIRSPEED (Vne +5%)    -->
+        <!-- ********************************************************************* -->
+
+        <Component ID="as33_overspeed">
+          <UseTemplate Name="ASOBO_GT_Update">
+              <FREQUENCY>30</FREQUENCY>
+              <UPDATE_CODE>
+                  (O:INIT_OVERSPEED) 0 == if{
+
+                    78.25 d (&gt;O:VNE_MS)
+                    1.05 * (&gt;O:OVERSPEED_FLUTTER_MS)
+
+                    0 (&gt;O:OVERSPEED_TIME_S)
+                    0 (&gt;Z:AS33_OVERSPEEDING)
+
+                    1 (&gt;O:INIT_OVERSPEED)
+                  }
+
+                  (A:AIRSPEED TRUE, meters per second) (O:VNE_MS) &gt; if{
+                    100 (&gt;L:SOUND_VNE_WARNING)
+                  } els{
+                    0 (&gt;L:SOUND_VNE_WARNING)
+                  }
+
+                  (A:AIRSPEED TRUE, meters per second) (O:OVERSPEED_FLUTTER_MS) &gt; if{
+                    (Z:AS33_OVERSPEEDING) 0 == if{
+                      (E:SIMULATION TIME,seconds) (&gt;O:OVERSPEED_TIME_S)
+                      1 (&gt;Z:AS33_OVERSPEEDING)
+                    }
+                  } els{
+                    0 (&gt;O:OVERSPEED_TIME_S)
+                    0 (&gt;Z:AS33_OVERSPEEDING)
+                    0 (&gt;A:AILERON TRIM PCT, percent over 100)
+                  }
+
+                  (Z:AS33_OVERSPEEDING) if{
+                    (E:SIMULATION TIME,seconds) (O:OVERSPEED_TIME_S) - (&gt;O:OVERSPEED_DURATION_S)
+
+                    (A:AIRSPEED TRUE, meters per second) (O:OVERSPEED_FLUTTER_MS) - 7 / 1 min 0 max (&gt;O:OVERSPEED_RANGE)
+
+                    (O:OVERSPEED_RANGE) 3 * 1 min (&gt;Z:AS33_OVERSPEED_FADE_IN)
+
+                    0.8 (&gt;O:OVERSPEED_FLEX_PERIOD)
+
+                    (E:SIMULATION TIME,seconds) (O:OVERSPEED_FLEX_PERIOD) % (O:OVERSPEED_FLEX_PERIOD) / 6.28 *
+                    sin (O:OVERSPEED_RANGE) * d (&gt;Z:AS33_OVERSPEED_FLEX)
+
+                    (O:OVERSPEED_RANGE) * 0.3 * (&gt;A:AILERON TRIM PCT, percent over 100)
+
+                  }
+
+              </UPDATE_CODE>
+          </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--     WING FLEX                   -->
+        <!-- ******************************* -->
+
+        <Component ID="wing_left_flex_animation">
+              <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>Left_wing_flex</ANIM_NAME>
+                <ANIM_LENGTH>100</ANIM_LENGTH>
+                <ANIM_CODE>
+                  (Z:AS33_OVERSPEEDING) if{
+                    (Z:AS33_OVERSPEED_FLEX) (Z:AS33_OVERSPEED_FADE_IN) *
+                    (A:WING FLEX PCT:1, percent over 100) 1 (Z:AS33_OVERSPEED_FADE_IN) - * +
+                  } els{
+                    (A:WING FLEX PCT:1, percent over 100)
+                  }
+                  1 min 1 neg max
+                  0.3 + 1.5 / 50 * 50 +
+                </ANIM_CODE>
+              </UseTemplate>
+          </Component>
+
+          <Component ID="wing_right_flex_animation">
+              <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>Right_wing_flex</ANIM_NAME>
+                <ANIM_LENGTH>100</ANIM_LENGTH>
+                <ANIM_CODE>
+                  (Z:AS33_OVERSPEEDING) if{
+                    (Z:AS33_OVERSPEED_FLEX) neg (Z:AS33_OVERSPEED_FADE_IN) *
+                    (A:WING FLEX PCT:1, percent over 100) 1 (Z:AS33_OVERSPEED_FADE_IN) - * +
+                  } els{
+                    (A:WING FLEX PCT:1, percent over 100)
+                  }
+                  1 min 1 neg max
+                  0.3 + 1.5 / 50 * 50 +
+                </ANIM_CODE>
+              </UseTemplate>
+          </Component>
+
+          <!-- ****************************************************** -->
+        <!-- ****************************************************** -->
+        <!--    Behaviours INTERNAL ONLY                            -->
+        <!-- ****************************************************** -->
+        <!-- ****************************************************** -->
+
+      <!-- ***************************************************** -->
+      <!--      WING AILERON FLEX                                -->
+      <!-- this flex calculation is different than external view -->
+      <!-- ***************************************************** -->
+
+        <Component ID="wing_left_aileron_flex_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>Left_aileron_flex</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <!-- Note the divisor is 3.0 for this internal view -->
+              <ANIM_CODE>
+                  (Z:AS33_OVERSPEEDING) if{
+                    (Z:AS33_OVERSPEED_FLEX) (Z:AS33_OVERSPEED_FADE_IN) *
+                    (A:WING FLEX PCT:1, percent over 100) 1 (Z:AS33_OVERSPEED_FADE_IN) - * +
+                  } els{
+                    (A:WING FLEX PCT:1, percent over 100)
+                  }
+              1 min 1 neg max
+                0.3 + 3.0 / 50 * 50 + 1.5 / 16.67 +
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="wing_right_aileron_flex_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>Right_aileron_flex</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <!-- Note the divisor is 3.0 for this internal view -->
+              <ANIM_CODE>
+                  (Z:AS33_OVERSPEEDING) if{
+                    (Z:AS33_OVERSPEED_FLEX) neg (Z:AS33_OVERSPEED_FADE_IN) *
+                    (A:WING FLEX PCT:1, percent over 100) 1 (Z:AS33_OVERSPEED_FADE_IN) - * +
+                  } els{
+                    (A:WING FLEX PCT:1, percent over 100)
+                  }
+              1 min 1 neg max
+                0.3 + 3.0 / 50 * 50 + 1.5 / 16.67 +
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ****************** -->
+        <!-- COMMON UPDATE CODE -->
+        <!-- ****************** -->
+
+        <Component ID="B21_UPDATE_CODE">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>30</FREQUENCY>
+                <UPDATE_CODE>
+                    (Z:B21_TE_MS) 0.05 * (Z:B21_TE_SMOOTHED_MS) 0.95 * + d (&gt;Z:B21_TE_SMOOTHED_MS)
+                    (A:AIRSPEED TRUE, meters per second) 0.05 * (Z:B21_AIRSPEED_SMOOTHED_MS) 0.95 * + d (&gt;Z:B21_AIRSPEED_SMOOTHED_MS)
+                    r / neg 0 max 100 min d (&gt;Z:B21_GLIDE_RATIO_SMOOTHED) (&gt;A:EXTERNAL SYSTEM VALUE, number)
+
+                    (A:SPOILERS HANDLE POSITION, percent) d 5 &gt; if{
+                        (O:B21_SPOILERS_PERCENT) 5 &lt;= if{
+                            (L:SOUND_SPOILERS_OPEN) ! (&gt;L:SOUND_SPOILERS_OPEN)
+                        }
+                    } els{
+                        (O:B21_SPOILERS_PERCENT) 5 &gt; if{
+                            (L:SOUND_SPOILERS_CLOSE) ! (&gt;L:SOUND_SPOILERS_CLOSE)
+                        }
+                    }
+                    (&gt;O:B21_SPOILERS_PERCENT)
+
+                    (A:CANOPY OPEN, percent) (O:CANOPY_OPEN_PREV) &gt; if{
+                        (L:SOUND_CANOPY_OPEN_DISABLE) 0 == if{
+                            (L:SOUND_CANOPY_OPEN) ! (&gt;L:SOUND_CANOPY_OPEN)
+                            1 (&gt;L:SOUND_CANOPY_OPEN_DISABLE)
+                            0 (&gt;L:SOUND_CANOPY_CLOSE_DISABLE)
+                        }
+                        (A:CANOPY OPEN, percent) (&gt;O:CANOPY_OPEN_PREV)
+                    }
+                    (A:CANOPY OPEN, percent) (O:CANOPY_OPEN_PREV) &lt; if{
+                        (L:SOUND_CANOPY_CLOSE_DISABLE) 0 == if{
+                            (L:SOUND_CANOPY_CLOSE) ! (&gt;L:SOUND_CANOPY_CLOSE)
+                            1 (&gt;L:SOUND_CANOPY_CLOSE_DISABLE)
+                            0 (&gt;L:SOUND_CANOPY_OPEN_DISABLE)
+                        }
+                        (A:CANOPY OPEN, percent) (&gt;O:CANOPY_OPEN_PREV)
+                    }
+
+                    (A:GEAR HANDLE POSITION, bool) (O:GEAR_PREV) &gt; if{
+                        (L:SOUND_GEAR_DOWN_DISABLE) 0 == if{
+                            (O:XML_INIT_COMPLETE) 1 == if{
+                                (L:SOUND_GEAR_DOWN) ! (&gt;L:SOUND_GEAR_DOWN)
+                            }
+                            1 (&gt;L:SOUND_GEAR_DOWN_DISABLE)
+                            0 (&gt;L:SOUND_GEAR_UP_DISABLE)
+                        }
+                        (A:GEAR HANDLE POSITION, bool) (&gt;O:GEAR_PREV)
+                    }
+                    (A:GEAR HANDLE POSITION, bool) (O:GEAR_PREV) &lt; if{
+                        (L:SOUND_GEAR_UP_DISABLE) 0 == if{
+                            (O:XML_INIT_COMPLETE) 1 == if{
+                                (L:SOUND_GEAR_UP) ! (&gt;L:SOUND_GEAR_UP)
+                            }
+                            1 (&gt;L:SOUND_GEAR_UP_DISABLE)
+                            0 (&gt;L:SOUND_GEAR_DOWN_DISABLE)
+                        }
+                        (A:GEAR HANDLE POSITION, bool) (&gt;O:GEAR_PREV)
+                    }
+
+                    (A:GEAR HANDLE POSITION, bool) if{
+                        (A:AIRSPEED TRUE, meters per second) 20 - 0 max (&gt;L:SOUND_GEAR_WIND)
+                    } els{
+                        0 (&gt;L:SOUND_GEAR_WIND)
+                    }
+
+                    (A:SPOILERS HANDLE POSITION, percent) 3 &gt; if{
+                        (A:AIRSPEED TRUE, meters per second) 20 - 0 max 10 /
+                        (A:SPOILERS HANDLE POSITION, percent) 30 / *
+                        (&gt;L:SOUND_SPOILERS_WIND)
+                    } els{
+                        0 (&gt;L:SOUND_SPOILERS_WIND)
+                    }
+
+                    (O:FLAPS_INDEX_PREV) 0 == if{
+                        (A:FLAPS HANDLE INDEX, number) 1 + (&gt;O:FLAPS_INDEX_PREV)
+                    } els{
+                        (A:FLAPS HANDLE INDEX, number) (O:FLAPS_INDEX_PREV) 1 - - d 0 != if{
+                            0 &gt; if{
+                                (L:SOUND_FLAPS_DOWN) ! (&gt;L:SOUND_FLAPS_DOWN)
+                            } els{
+                                (L:SOUND_FLAPS_UP) ! (&gt;L:SOUND_FLAPS_UP)
+                            }
+                            (A:FLAPS HANDLE INDEX, number) 1 + (&gt;O:FLAPS_INDEX_PREV)
+                        }
+                    }
+
+                    1 (&gt;O:XML_INIT_COMPLETE)
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ****************************************************************************************** -->
+        <!--                        ACTIVE FLIGHT PERFORMANCE CONTROL                                   -->
+        <!-- This is to allow the simulation of negative flap settings                                  -->
+        <!-- This code cracks open the spoilers in flap index 0 and 1 if speed is below thresholds      -->
+        <!-- ****************************************************************************************** -->
+        <Component ID="B21_FLIGHT_CONTROL">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>1</FREQUENCY><!-- Update once per second -->
+                <UPDATE_CODE>
+                    (A:FLAPS HANDLE INDEX, number) 0 == if{
+                        (A:SPOILERS HANDLE POSITION, percent) 3 &lt; if{
+                            (A:AIRSPEED TRUE, kph) 160 &lt; if{
+                                160 (A:AIRSPEED TRUE, kph) -
+                                0.1 * 3 min
+                                (&gt;A:SPOILERS HANDLE POSITION, percent)
+                                1 (&gt;O:B21_FLIGHT_CONTROL_ACTIVE)
+                            } els{
+                                0 (&gt;A:SPOILERS HANDLE POSITION, percent)
+                                0 (&gt;O:B21_FLIGHT_CONTROL_ACTIVE)
+                            }
+                        }
+                        quit
+                    }
+                    (A:FLAPS HANDLE INDEX, number) 1 == if{
+                        (A:SPOILERS HANDLE POSITION, percent) 3 &lt; if{
+                            (A:AIRSPEED TRUE, kph) 130 &lt; if{
+                                130 (A:AIRSPEED TRUE, kph) -
+                                0.1 * 3 min
+                                (&gt;A:SPOILERS HANDLE POSITION, percent)
+                                1 (&gt;O:B21_FLIGHT_CONTROL_ACTIVE)
+                            } els{
+                                0 (&gt;A:SPOILERS HANDLE POSITION, percent)
+                                0 (&gt;O:B21_FLIGHT_CONTROL_ACTIVE)
+                            }
+                        }
+                        quit
+                    }
+                    (A:SPOILERS HANDLE POSITION, percent) 3 &lt; if{
+                        0 (&gt;A:SPOILERS HANDLE POSITION, percent)
+                    }
+                    0 (&gt;O:B21_FLIGHT_CONTROL_ACTIVE)
+
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ****************************************************************************************** -->
+        <!--        HORIZONTAL WIND CALCULATION - OUTPUTS Z:B21_WIND_MS                                -->
+        <!-- ****************************************************************************************** -->
+        <Component ID="B21_WIND_CALCULATION">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>20</FREQUENCY><!-- Update 20 per second -->
+                <UPDATE_CODE>
+                    (A:AMBIENT WIND X, meters per second) sqr
+                    (A:AMBIENT WIND Z, meters per second) sqr
+                    + sqrt
+                    (&gt;Z:B21_WIND_MS)
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ****************************************************************************************** -->
+        <!--                        ACTIVE ADVERSE YAW CONTROL                                          -->
+        <!-- This applies rudder trim when ailerons are moved to simulate adverse yaw in a way that     -->
+        <!-- can be disabled. The proportion 0..1 of adverse yaw to be applied is in the Z:var          -->                                                                          -->
+        <!-- Z:B21_ADVERSE_YAW_RATIO                                                                    -->
+        <!-- ****************************************************************************************** -->
+        <Component ID="B21_ADVERSE_YAW">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>10</FREQUENCY><!-- Update 10 per second -->
+                <UPDATE_CODE>
+                    (A:AILERON LEFT DEFLECTION PCT, percent over 100) d sign r abs 1.2 pow * 100 * neg
+                    (Z:B21_ADVERSE_YAW_RATIO) * 0.6 * (&gt;K:RUDDER_TRIM_SET)
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ****************************************************************************************** -->
+        <!--        TOTAL ENERGY VARIO CALCULATION - OUTPUTS Z:B21_TE_MS                                -->
+        <!-- ****************************************************************************************** -->
+        <Component ID="B21_TOTAL_ENERGY_VARIO_CALCULATION">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>20</FREQUENCY><!-- Update 20 per second -->
+                <UPDATE_CODE>
+                    (Z:B21_VARIO_INIT) 1 == if{
+
+                        (E:SIMULATION TIME, seconds) d
+                        (Z:B21_VARIO_TIME_PREV_S) - d
+                        0 == if{ quit }
+                        (&gt;Z:B21_VARIO_TIME_DELTA_S)
+                        (&gt;Z:B21_VARIO_TIME_PREV_S)
+
+                        (Z:B21_VARIO_TIME_DELTA_S) 1 /
+                        0 max 1 min
+                        (&gt;Z:B21_VARIO_COMP_SMOOTHING)
+
+                        (A:AIRSPEED TRUE, meters per second) sqr (Z:B21_VARIO_SPEED2_PREV_MS) - (&gt;Z:B21_VARIO_SPEED2_DELTA_MS)
+                        (Z:B21_VARIO_SPEED2_DELTA_MS) 19.62 / (Z:B21_VARIO_TIME_DELTA_S) /
+                        -40 max 40 min
+                        (Z:B21_VARIO_COMP_SMOOTHING) * (Z:B21_VARIO_COMP_MS) 1 (Z:B21_VARIO_COMP_SMOOTHING) - * +
+                        (&gt;Z:B21_VARIO_COMP_MS)
+
+                        (Z:B21_VARIO_TIME_DELTA_S) 1 / 0 max 1 min (&gt;Z:B21_VARIO_VSI_SMOOTHING)
+                        (A:PLANE ALTITUDE, meters) (Z:B21_VARIO_ALT_PREV_M) - (Z:B21_VARIO_TIME_DELTA_S) /
+                        (Z:B21_VARIO_VSI_SMOOTHING) * (Z:B21_VARIO_VSI_MS) 1 (Z:B21_VARIO_VSI_SMOOTHING) - * +
+                        -40 max 40 min
+                        (&gt;Z:B21_VARIO_VSI_MS)
+
+                        (Z:B21_VARIO_VSI_MS) (Z:B21_VARIO_COMP_MS) + d
+                        (&gt;Z:B21_VARIO_TE_MS)
+                        -8 max 8 min
+                        (A:AIRSPEED TRUE, meters per second) 10 &lt; if{
+                            0
+                        } els{
+                            (A:AIRSPEED TRUE, meters per second) 20 &lt; if{
+                                (A:AIRSPEED TRUE, meters per second) 10 - 10 / *
+                            }
+                        }
+                        (&gt;Z:B21_TE_MS)
+
+                        (A:AIRSPEED TRUE, meters per second) sqr (&gt;Z:B21_VARIO_SPEED2_PREV_MS)
+                        (A:PLANE ALTITUDE, meters) (&gt;Z:B21_VARIO_ALT_PREV_M)
+                    } els{
+                        1 (&gt;Z:B21_VARIO_INIT)
+                        0 (&gt;Z:B21_VARIO_COMP_MS)
+                        0 (&gt;Z:B21_VARIO_VSI_MS)
+
+                        (A:AIRSPEED TRUE, meters per second) sqr (&gt;Z:B21_VARIO_SPEED2_PREV_MS)
+                        (A:PLANE ALTITUDE, meters) (&gt;Z:B21_VARIO_ALT_PREV_M)
+                        (E:SIMULATION TIME, seconds) (&gt;Z:B21_VARIO_TIME_PREV_S)
+                    }
+
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ********************************************************************** -->
+        <!-- WINCH UPDATE CODE     -->
+        <!-- Controlled by winch.js: -->
+        <!--  (Z:B21_WINCH_LEVEL_WINGS) true => set wings level -->
+        <!--  (Z:B21_WINCH_PULL) true => apply velocity adjust -->
+        <!--  (Z:B21_WINCH_PULL_MS) target for (VELOCITY BODY Z, meters per second) -->
+        <!-- ********************************************************************** -->
+
+        <Component ID="B21_WINCH">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>30</FREQUENCY>
+                <UPDATE_CODE>
+                    (O:TIME_PREV_S) 0 == if{
+                        (E:SIMULATION TIME, seconds) (&gt;O:TIME_PREV_S)
+                        quit
+                    }
+
+                    (Z:B21_WINCH_LEVEL_WINGS, boolean) if{
+                        (A:PLANE BANK DEGREES, degrees) 0.97 * (&gt;A:PLANE BANK DEGREES, degrees)
+                    }
+
+                    (Z:B21_WINCH_PULL, boolean) if{
+                        (Z:B21_WINCH_PULL_MS, meters per second) (A:VELOCITY BODY Z, meters per second) - d
+                        0 &gt; if{
+                            0.5 * (E:SIMULATION TIME, seconds) (O:TIME_PREV_S) - 0.05 min *
+                            (A:VELOCITY BODY Z, meters per second) + (&gt;A:VELOCITY BODY Z, meters per second)
+                        }
+                    }
+
+                    (E:SIMULATION TIME, seconds) (&gt;O:TIME_PREV_S)
+
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--          LANDING GEAR           -->
+        <!-- ******************************* -->
+
+        <Component ID="gear_wheel_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>wheel_action</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                100 (A:GEAR ANIMATION POSITION:0, percent over 100) 200 * -
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="gear_door_left_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>main_landing_gear_left_door</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                100 (A:GEAR ANIMATION POSITION:0, percent over 100) 200 * -
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="gear_door_right_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>main_landing_gear_right_door</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                100 (A:GEAR ANIMATION POSITION:0, percent over 100) 200 * -
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--      MOTOR / PROPELLER          -->
+        <!-- ******************************* -->
+
+        <!-- We calculate the value of Z:B21_MOTOR_EXT_ANIM in the first animation -->
+        <!-- and use it in all the others.                                         -->
+        <!-- A:LIGHT WING:1 is used in multiplay as target for pylon up/down and   -->
+        <!-- a smooth animation is used locally aiming for that.                   -->
+        <Component ID="motor_retract_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>Motor_retract</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                    (O:MOTOR_EXT_INIT) 0 == if{
+                        (E:SIMULATION TIME, seconds) (&gt;O:MOTOR_EXT_TIME)
+                        0 (&gt;Z:B21_MOTOR_EXT_ANIM)
+                        1 (&gt;O:MOTOR_EXT_INIT)
+                    }
+                    (E:SIMULATION TIME, seconds) d (O:MOTOR_EXT_TIME) - 10 *
+                    r (&gt;O:MOTOR_EXT_TIME)
+
+                    (A:LIGHT WING:1, boolean) if{
+                        (Z:B21_MOTOR_EXT_ANIM) + d (&gt;Z:B21_MOTOR_EXT_ANIM)
+                    } els{
+                        (Z:B21_MOTOR_EXT_ANIM) r - d (&gt;Z:B21_MOTOR_EXT_ANIM)
+                    }
+                    0 max
+                    100 min
+                    d (&gt;Z:B21_MOTOR_EXT_ANIM)
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="motor_door_left_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>Motor_retract_door_l</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                  (Z:B21_MOTOR_EXT_ANIM)
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="motor_door_right_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>Motor_retract_door_r</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                  (Z:B21_MOTOR_EXT_ANIM)
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- PROPELLER EFFECTS -->
+
+        <Component ID="prop_visibility" Node="prop_still_retract">
+            <UseTemplate Name="ASOBO_GT_Visibility">
+                    <VISIBILITY_CODE>
+                        (A:IS USER SIM, boolean) if{
+                            (Z:B21_MOTOR_EXT_ANIM) 10 &lt; if{ 0 quit }
+                            (A:PROP MAX RPM PERCENT:1, percent) 20 &lt; if{ 1 } els{ 0 }
+                        } els{ (Z:B21_MOTOR_EXT_ANIM) 99 &lt; }
+                    </VISIBILITY_CODE>
+            </UseTemplate>
+        </Component>
+        <Component ID="prop_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>prop_still_rotation</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                (A:PROP RPM:1, rpm) 100 &lt;
+                if{ 0 }
+                els{
+                    (E:ABSOLUTE TIME,seconds) (A:PROP MAX RPM PERCENT:1, percent) * 12 % 8.333 *
+                }
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="prop_slow_visibility" Node="prop_slow">
+            <UseTemplate Name="ASOBO_GT_Visibility">
+                   <VISIBILITY_CODE>
+                  (A:IS USER SIM, boolean) if{
+                        (Z:B21_MOTOR_EXT_ANIM) 99 &lt; if{ 0 quit }
+                        (A:PROP MAX RPM PERCENT:1, percent) 20 &gt;
+                        if{
+                            (A:PROP MAX RPM PERCENT:1, percent) 50 &lt; if{ 1 } els{ 0 }
+                        } els{ 0 }
+                  } els{ (Z:B21_MOTOR_EXT_ANIM) 99 &gt; }
+              </VISIBILITY_CODE>
+            </UseTemplate>
+        </Component>
+        <Component ID="prop_slow_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>prop_slow</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                (E:ABSOLUTE TIME,seconds) 25 * 100 %
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="prop_blur_visibility" Node="prop_blur">
+            <UseTemplate Name="ASOBO_GT_Visibility">
+                <VISIBILITY_CODE>
+                   (A:IS USER SIM, boolean) if{
+                       (Z:B21_MOTOR_EXT_ANIM) 99 &lt; if{ 0 quit }
+                        (A:PROP MAX RPM PERCENT:1, percent) 30 &gt; if{ 1 } els{ 0 }
+                   } els{ (Z:B21_MOTOR_EXT_ANIM) 99 &gt; }
+                </VISIBILITY_CODE>
+            </UseTemplate>
+        </Component>
+        <Component ID="prop_blur_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>prop_blur</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                (E:ABSOLUTE TIME,seconds) 10 * 100 %
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="prop_side_visibility" Node="prop_side">
+            <UseTemplate Name="ASOBO_GT_Visibility">
+                <VISIBILITY_CODE>
+                    (A:IS USER SIM, boolean) if{
+                        (Z:B21_MOTOR_EXT_ANIM) 99 &lt; if{ 0 quit }
+                        (A:PROP MAX RPM PERCENT:1, percent) 25 &gt; if{ 1 } els{ 0 }
+                    } els{ (Z:B21_MOTOR_EXT_ANIM) 99 &gt; }
+                </VISIBILITY_CODE>
+            </UseTemplate>
+        </Component>
+        <Component ID="prop_side_animation">
+            <UseTemplate Name="ASOBO_GT_Anim">
+              <ANIM_NAME>prop_side</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_CODE>
+                (E:ABSOLUTE TIME,seconds) 20 * 100 %
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- *************** -->
+        <!--     THROTTLE    -->
+        <!-- *************** -->
+
+        <Component ID="AS33_ENGINE">
+            <UseInputEvent ID="ENGINE">
+                <THROTTLE_ID>1</THROTTLE_ID>
+            </UseInputEvent>
+        </Component>
+
+
+        <!-- **************** -->
+        <!-- PILOT VISIBILITY -->
+        <!-- **************** -->
+
+        <Component ID="Pilot_0" Node="Pilot_0">
+            <Visibility>
+                <Parameter>
+                    <Code>
+                          (Z:PILOT_HIDE, number)
+                    </Code>
+                </Parameter>
+            </Visibility>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--          CANOPY                 -->
+        <!-- ******************************* -->
+
+        <Component ID="canopy_animation">
+            <UseTemplate Name="Asobo_GT_Anim">
+              <ANIM_NAME>canopy_action</ANIM_NAME>
+              <ANIM_LENGTH>100</ANIM_LENGTH>
+              <ANIM_LAG>30</ANIM_LAG>
+              <ANIM_CODE>
+                (A:CANOPY OPEN, percent over 100) 100 *
+              </ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--       ENGINE MANAGEMENT         -->
+        <!-- ******************************* -->
+
+        <Component ID="Engine_throttle_box" Node="Engine Throttle Box">
+            <Animation Name = "Engine_throttle_box" Guid = "e8ae7cf6-a8e9-4211-811e-e9833fe8ac8d" Length = "100" Type = "Sim" TypeParam = "AutoPlay">
+                <Parameter>
+                    <Code>
+                        50
+                    </Code>
+                </Parameter>
+            </Animation>
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+                <PART_ID>Engine_throttle_box</PART_ID>
+                <DRAG_AXIS_SCALE>-450</DRAG_AXIS_SCALE>
+                <TOOLTIPID>TT:COCKPIT.TOOLTIPS.THROTTLE_CONTROL</TOOLTIPID>
+                <POSITION_TYPE>O</POSITION_TYPE>
+                <POSITION_VAR>Position</POSITION_VAR>
+                <AXIS>Y</AXIS>
+                <NO_ARROWS/>
+                <CURSOR>UpDownArrows</CURSOR>
+                <DELTA_MIN>0.00025</DELTA_MIN>
+                <RESET_LIMITS/>
+                <SNAP_DISTANCE>1</SNAP_DISTANCE>
+                <ADJUST_RAW_DRAG_VALUE/>
+                <DRAG_VALUE_OVERRIDE/>
+                <LOCK_CODE></LOCK_CODE>
+                <UNLOCK_CODE></UNLOCK_CODE>
+                <DRAG_CODE>
+                    (A:GENERAL ENG THROTTLE LEVER POSITION:1, position 16k) 50 (O:DragScale) * +
+                    16384 min (A:THROTTLE LOWER LIMIT, position 16k) max 16384 / 1 min (&gt;B:ENGINE_Throttle_1_SET)
+                </DRAG_CODE>
+                <POSITIVE_AXIS_CODE>(A:GENERAL ENG THROTTLE LEVER POSITION:1, position 16k) 701 +
+                    16384 min 16384 / 1 min (&gt;B:ENGINE_Throttle_1_SET)
+                </POSITIVE_AXIS_CODE>
+                <NEGATIVE_AXIS_CODE>(A:GENERAL ENG THROTTLE LEVER POSITION:1, position 16k) 701 - (A:THROTTLE LOWER LIMIT, position 16k) max
+                    16384 / 1 min (&gt;B:ENGINE_Throttle_1_SET)</NEGATIVE_AXIS_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="Engine_master_power_switch" Node="Engine Master Power">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>Engine_master_power</ANIM_NAME>
+                <ANIM_LAG>200</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_ENGINE_MASTER_SWITCH_100, number)</ANIM_CODE>
+                <ANIMTIP_0>ENGINE ON</ANIMTIP_0>
+                <ANIMTIP_1>ENGINE OFF</ANIMTIP_1>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_ENGINE_MASTER_TOGGLE,bool) ! (&gt;Z:B21_ENGINE_MASTER_TOGGLE,bool)
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="Engine_extend_switch" Node="Engine Extend Retract Box">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>Engine_ext_ret_switch</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(A:LIGHT WING:1, boolean) if{ 100 } els{ 0 }</ANIM_CODE>
+                <ANIMTIP_0>ENGINE UP</ANIMTIP_0>
+                <ANIMTIP_1>ENGINE DOWN</ANIMTIP_1>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (A:LIGHT WING:1, boolean) ! (&gt;A:LIGHT WING:1, boolean)
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <Component ID="Engine_throttle_handle">
+            <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>Engine_throttle_handle</ANIM_NAME>
+                <ANIM_LAG>200</ANIM_LAG>
+                <ANIM_CODE>(A:GENERAL ENG THROTTLE LEVER POSITION:1, percent)</ANIM_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--       SPOILER HANDLE            -->
+        <!-- ******************************* -->
+
+        <Component ID="spoiler_handle" Node="Airbrake Handle">
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+                <PART_ID>spoiler_handle</PART_ID>
+                <DRAG_AXIS_SCALE>-150</DRAG_AXIS_SCALE>
+                <TOOLTIPID>TT:COCKPIT.TOOLTIPS.SPEEDBRAKE_LEVER</TOOLTIPID>
+                <POSITION_TYPE>O</POSITION_TYPE>
+                <POSITION_VAR>Position</POSITION_VAR>
+                <AXIS>Y</AXIS>
+                <DRAG_INVERTION>1</DRAG_INVERTION>
+                <NO_ARROWS/>
+                <CURSOR>UpDownArrows</CURSOR>
+                <DELTA_MIN>0.001</DELTA_MIN>
+                <RESET_LIMITS/>
+                <SNAP_DISTANCE>1</SNAP_DISTANCE>
+                <ADJUST_RAW_DRAG_VALUE/>
+                <DRAG_VALUE_OVERRIDE/>
+                <LOCK_CODE>
+                </LOCK_CODE>
+                <UNLOCK_CODE>
+                </UNLOCK_CODE>
+                <DRAG_CODE>
+                    (A:SPOILERS HANDLE POSITION, position 16k) 100 (O:DragScale) * + 16383 min 0 max (&gt;K:SPOILERS_SET)
+                </DRAG_CODE>
+                <POSITIVE_AXIS_CODE>(A:SPOILERS HANDLE POSITION, position 16k) 701 - 0 max (&gt;K:SPOILERS_SET)</POSITIVE_AXIS_CODE>
+                <NEGATIVE_AXIS_CODE>(A:SPOILERS HANDLE POSITION, position 16k) 701 + 16383 min (&gt;K:SPOILERS_SET)</NEGATIVE_AXIS_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--       TRIM LEVER                -->
+        <!-- ******************************* -->
+
+        <Component ID="trim_handle_action" Node="Trim Handle">
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelLeftDrag_Axis">
+                <PART_ID>trim_handle_action</PART_ID>
+                <DRAG_AXIS_SCALE>-150</DRAG_AXIS_SCALE>
+                <TOOLTIPID>TRIM</TOOLTIPID>
+                <POSITION_TYPE>O</POSITION_TYPE>
+                <POSITION_VAR>Position</POSITION_VAR>
+                <AXIS>Y</AXIS>
+                <DRAG_INVERTION>1</DRAG_INVERTION>
+                <NO_ARROWS/>
+                <CURSOR>UpDownArrows</CURSOR>
+                <DELTA_MIN>0.001</DELTA_MIN>
+                <RESET_LIMITS/>
+                <SNAP_DISTANCE>1</SNAP_DISTANCE>
+                <ADJUST_RAW_DRAG_VALUE/>
+                <DRAG_VALUE_OVERRIDE/>
+                <LOCK_CODE>
+                </LOCK_CODE>
+                <UNLOCK_CODE>
+                </UNLOCK_CODE>
+                <DRAG_CODE>
+                    (A:ELEVATOR TRIM PCT, percent) 4 (O:DragScale) * + 164 * 16383 min 16383 neg max (&gt;K:ELEVATOR_TRIM_SET)
+                </DRAG_CODE>
+                <POSITIVE_AXIS_CODE>(A:ELEVATOR TRIM PCT, percent) 5 - 164 * 16383 neg max (&gt;K:ELEVATOR_TRIM_SET)</POSITIVE_AXIS_CODE>
+                <NEGATIVE_AXIS_CODE>(A:ELEVATOR TRIM PCT, percent) 5 + 164 * 16383 min (&gt;K:ELEVATOR_TRIM_SET)</NEGATIVE_AXIS_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************************* -->
+        <!--       FLAPS HANDLE              -->
+        <!-- ******************************* -->
+
+        <Component ID="flap_handle" Node="Flap_Handle">
+            <UseTemplate Name="ASOBO_GT_Lever_DraggingWheelLeftDrag_Axis">
+                <NODE_ID>Flap_Handle</NODE_ID>
+                <ANIM_NAME>flap_handle</ANIM_NAME>
+                <STEPS_NUMBER>7</STEPS_NUMBER>
+                <POSITION_TYPE>L</POSITION_TYPE>
+                <POSITION_VAR>Position</POSITION_VAR>
+                <IGNORE_GATES>1</IGNORE_GATES>
+                <DRAG_SPEED>100</DRAG_SPEED>
+                <TOOLTIPID>FLAPS</TOOLTIPID>
+                <NO_ARROWS/>
+                <AXIS>Y</AXIS>
+                <CURSOR>UpDownArrows</CURSOR>
+                <HELPID>HELPID_GAUGE_FLAPS_SWITCH</HELPID>
+                <DRAG_CODE>
+                    (O:B21_DRAG_DISTANCE) (O:DragScale) + d (&gt;O:B21_DRAG_DISTANCE)
+                    40 &gt;
+                    if{
+                        (&gt;K:FLAPS_DECR) 0 (&gt;O:B21_DRAG_DISTANCE)
+                    } els{
+                        (O:B21_DRAG_DISTANCE) 40 neg &lt;
+                        if{
+                            (&gt;K:FLAPS_INCR) 0 (&gt;O:B21_DRAG_DISTANCE)
+                        }
+                    }
+                </DRAG_CODE>
+                <DOWN_CODE>1 (&gt;O:XMLVAR_Interacting_With_Flaps) 0 (&gt;O:B21_DRAG_DISTANCE)</DOWN_CODE>
+                <RELEASE_CODE>0 (&gt;O:XMLVAR_Interacting_With_Flaps)</RELEASE_CODE>
+                <POSITIVE_AXIS_CODE>(&gt;K:FLAPS_DECR)</POSITIVE_AXIS_CODE>
+                <NEGATIVE_AXIS_CODE>(&gt;K:FLAPS_INCR)</NEGATIVE_AXIS_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ********************** -->
+        <!-- MSFS TRIM AXIS BUGFIX  -->
+        <!-- ********************** -->
+
+        <!-- This is a NULL component purely to have Asobo reverse the direction of the elevator trim input -->
+        <Component ID="REVERSE_TRIM_FIX">
+            <UseTemplate Name="ASOBO_HANDLING_Wheel_ElevatorTrim_Template">
+                <INCREMENT>300</INCREMENT>
+            </UseTemplate>
+        </Component>
+
+        <!-- ***************************** -->
+        <!-- RUDDER WAGGLE CALL TOW PLANE  -->
+        <!-- ***************************** -->
+
+        <!-- This is currently DISABLED (see "quit" at top of code) as K:TOW_PLANE_REQUEST CTD's the sim -->
+        <Component ID="CALL_TOW_PLANE">
+            <UseTemplate Name="ASOBO_GT_Update">
+                <FREQUENCY>30</FREQUENCY>
+                <UPDATE_CODE>
+                    (A:SIM ON GROUND, Bool) ! if{
+                        quit
+                    }
+
+                    (A:TOW CONNECTION, Bool) if{
+                        quit
+                    }
+
+                    (O:DIRECTION) 1 != if{
+                        (A:RUDDER DEFLECTION PCT, percent over 100) 0.7 &gt; if{
+                            (O:WAGGLE_COUNT) 1 + (&gt;O:WAGGLE_COUNT)
+                            1 (&gt;O:DIRECTION)
+                        }
+                    }
+
+                    (O:DIRECTION) 2 != if{
+                        (A:RUDDER DEFLECTION PCT, percent over 100) 0.7 neg &lt; if{
+                            (O:WAGGLE_COUNT) 0 == if{
+                                (E:SIMULATION TIME,seconds) (&gt;O:WAGGLE_START_S)
+                            }
+                            (O:WAGGLE_COUNT) 1 + (&gt;O:WAGGLE_COUNT)
+                            2 (&gt;O:DIRECTION)
+                        }
+                    }
+
+                    (E:SIMULATION TIME,seconds) (O:WAGGLE_START_S) - 5 &gt; if{
+                        0 (&gt;O:WAGGLE_COUNT)
+                        0 (&gt;O:DIRECTION)
+                    }
+                    (O:WAGGLE_COUNT) 3 &gt; if{
+                        (L:SOUND_CALLING_LAUNCH) ! (&gt;L:SOUND_CALLING_LAUNCH)
+                        1 if{ 1 (&gt;K:TOW_PLANE_REQUEST) }
+                        0 (&gt;O:WAGGLE_COUNT)
+                    }
+                </UPDATE_CODE>
+            </UseTemplate>
+        </Component>
+
+    <!-- ******************************* -->
+    <!--             B21 NAV LX          -->
+    <!-- ******************************* -->
+
+        <!-- button 1 -->
+        <Component ID="lx_9050_button_1" Node="LX 9050 Button 1">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_1</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_1,number)</ANIM_CODE>
+                <TOOLTIPID>Thermal</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_1_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_1_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_1,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_1, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_1, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 2 -->
+        <Component ID="lx_9050_button_2" Node="LX 9050 Button 2">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_2</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_2,number)</ANIM_CODE>
+                <TOOLTIPID>Scroll North</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_2_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_2_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_2,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_2, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_2, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 3 -->
+        <Component ID="lx_9050_button_3" Node="LX 9050 Button 3">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_3</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_3,number)</ANIM_CODE>
+                <TOOLTIPID>Center Plane</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_3_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_3_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_3,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_3, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_3, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 4 -->
+        <Component ID="lx_9050_button_4" Node="LX 9050 Button 4">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_4</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_4,number)</ANIM_CODE>
+                <TOOLTIPID>Task</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_4_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_4_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_4,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_4, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_4, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 5 -->
+        <Component ID="lx_9050_button_5" Node="LX 9050 Button 5">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_5</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_5,number)</ANIM_CODE>
+                <TOOLTIPID>Scroll South</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_5_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_5_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_5,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_5, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_5, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 6 -->
+        <Component ID="lx_9050_button_6" Node="LX 9050 Button 6">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_6</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_6,number)</ANIM_CODE>
+                <TOOLTIPID>Settings</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_6_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_6_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_6,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_6, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_6, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 7 -->
+        <Component ID="lx_9050_button_7" Node="LX 9050 Button 7">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_7</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_7,number)</ANIM_CODE>
+                <TOOLTIPID>Scroll East</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_7_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_7_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_7,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_7, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_7, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- button 8 -->
+        <Component ID="lx_9050_button_8" Node="LX 9050 Button 8">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>lx_9050_button_8</ANIM_NAME>
+                <ANIM_LAG>300</ANIM_LAG>
+                <ANIM_CODE>(Z:B21_NAV_LX_BUTTON_8,number)</ANIM_CODE>
+                <TOOLTIPID>Scroll West</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                     (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_BUTTON_8_TOGGLE, bool) ! (&gt;Z:B21_NAV_LX_BUTTON_8_TOGGLE,bool)
+                    (Z:B21_NAV_LX_BUTTON_8,number) 0 == if{
+                        100 (&gt;Z:B21_NAV_LX_BUTTON_8, number)
+                    } els{
+                        0 (&gt;Z:B21_NAV_LX_BUTTON_8, number)
+                    }
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+        <!-- ******************** -->
+        <!--      rotary knobs    -->
+        <!-- ******************** -->
+
+        <!-- dial 1 -->
+        <Component ID="lx_9050_dial_1" Node="LX 9050 Dial 1">
+            <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>lx_9050_dial_1</ANIM_NAME>
+                <ANIM_CODE>(Z:B21_NAV_LX_DIAL_1_ANIM_100,number)</ANIM_CODE>
+            </UseTemplate>
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+                <WRAP>False</WRAP>
+                <ANTICLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_1_DOWN_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_1_DOWN_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_1_ANIM_100,number) 10 + 100 min (&gt;Z:B21_NAV_LX_DIAL_1_ANIM_100,number)
+                </ANTICLOCKWISE_CODE>
+                <CLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_1_UP_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_1_UP_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_1_ANIM_100,number) 10 - 0 max (&gt;Z:B21_NAV_LX_DIAL_1_ANIM_100,number)
+                </CLOCKWISE_CODE>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_1_CLICK,bool) ! (&gt;Z:B21_NAV_LX_DIAL_1_CLICK,bool)
+                </LEFT_SINGLE_CODE>
+                <TOOLTIPID>Maps [North Up]</TOOLTIPID>
+            </UseTemplate>
+        </Component>
+
+        <!-- dial 2 -->
+        <Component ID="lx_9050_dial_2" Node="LX 9050 Dial 2">
+            <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>lx_9050_dial_2</ANIM_NAME>
+                <ANIM_CODE>(Z:B21_NAV_LX_DIAL_2_ANIM_100,number)</ANIM_CODE>
+            </UseTemplate>
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+                <WRAP>False</WRAP>
+                <ANTICLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_2_DOWN_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_2_DOWN_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_2_ANIM_100,number) 10 - 100 + 100 % (&gt;Z:B21_NAV_LX_DIAL_2_ANIM_100,number)
+                </ANTICLOCKWISE_CODE>
+                <CLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_2_UP_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_2_UP_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_2_ANIM_100,number) 10 + 100 % (&gt;Z:B21_NAV_LX_DIAL_2_ANIM_100,number)
+                </CLOCKWISE_CODE>
+                <LEFT_SINGLE_CODE>
+                    quit
+                </LEFT_SINGLE_CODE>
+                <TOOLTIPID>Zoom</TOOLTIPID>
+            </UseTemplate>
+        </Component>
+
+        <!-- dial 3 -->
+        <Component ID="lx_9050_dial_3" Node="LX 9050 Dial 3">
+            <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>lx_9050_dial_3</ANIM_NAME>
+                <ANIM_CODE>(Z:B21_NAV_LX_DIAL_3_ANIM_100,number)</ANIM_CODE>
+            </UseTemplate>
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+                <WRAP>False</WRAP>
+                <ANTICLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_3_DOWN_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_3_DOWN_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_3_ANIM_100,number) 10 - 100 + 100 % (&gt;Z:B21_NAV_LX_DIAL_3_ANIM_100,number)
+                </ANTICLOCKWISE_CODE>
+                <CLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_3_UP_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_3_UP_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_3_ANIM_100,number) 10 + 100 % (&gt;Z:B21_NAV_LX_DIAL_3_ANIM_100,number)
+                </CLOCKWISE_CODE>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_3_CLICK,bool) ! (&gt;Z:B21_NAV_LX_DIAL_3_CLICK,bool)
+                </LEFT_SINGLE_CODE>
+                <TOOLTIPID>Nav Display / Start Task</TOOLTIPID>
+            </UseTemplate>
+        </Component>
+
+        <!-- dial 4 -->
+        <Component ID="lx_9050_dial_4" Node="LX 9050 Dial 4">
+            <UseTemplate Name="ASOBO_GT_Anim">
+                <ANIM_NAME>lx_9050_dial_4</ANIM_NAME>
+                <ANIM_CODE>(Z:B21_NAV_LX_DIAL_4_ANIM_100,number)</ANIM_CODE>
+            </UseTemplate>
+            <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+                <WRAP>False</WRAP>
+                <ANTICLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_4_DOWN_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_4_DOWN_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_4_ANIM_100,number) 10 - 100 + 100 % (&gt;Z:B21_NAV_LX_DIAL_4_ANIM_100,number)
+                </ANTICLOCKWISE_CODE>
+                <CLOCKWISE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_4_UP_TOGGLE,bool) ! (&gt;Z:B21_NAV_LX_DIAL_4_UP_TOGGLE,bool)
+                    (Z:B21_NAV_LX_DIAL_4_ANIM_100,number) 10 + 100 % (&gt;Z:B21_NAV_LX_DIAL_4_ANIM_100,number)
+                </CLOCKWISE_CODE>
+                <LEFT_SINGLE_CODE>
+                    (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                    (Z:B21_NAV_LX_DIAL_4_CLICK,bool) ! (&gt;Z:B21_NAV_LX_DIAL_4_CLICK,bool)
+                </LEFT_SINGLE_CODE>
+                <TOOLTIPID>Scroll task/settings</TOOLTIPID>
+            </UseTemplate>
+        </Component>
+
+    <!-- ******************************* -->
+    <!--      STROBE SWITCH              -->
+    <!-- ******************************* -->
+
+        <Component ID="LED_switch" Node="LED Switch Box">
+            <UseTemplate Name="ASOBO_GT_Switch_Code">
+                <ANIM_NAME>LED_switch</ANIM_NAME>
+                <ANIM_LAG>500</ANIM_LAG>
+                <ANIM_CODE>
+                    (O:B21_STROBE_INIT) 0 == if{
+                        1 (&gt;A:LIGHT STROBE:1, boolean)
+
+                        1 (&gt;O:B21_STROBE_INIT)
+                    }
+                    (A:LIGHT STROBE:1, boolean) if{ 0 } els{ 100 }
+                </ANIM_CODE>
+                <TOOLTIPID>Strobes are %((A:LIGHT STROBE:1, boolean))%{if}ON%{else}OFF%{end}</TOOLTIPID>
+                <LEFT_SINGLE_CODE>
+                     (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean) 1 (&gt;K:STROBES_TOGGLE)
+                </LEFT_SINGLE_CODE>
+            </UseTemplate>
+        </Component>
+
+
+    <!-- ******************************* -->
+    <!--          VARIO                  -->
+    <!-- ******************************* -->
+
+    <!-- Animation is driven by local var:      (Z:B21_BASIC_VARIO_NEEDLE,number)    -->
+
+    <Component ID="gauge_netto_vario_needle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>gauge_netto_vario_needle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>30</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_BASIC_VARIO_NEEDLE,number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--          LX S100                -->
+    <!-- ******************************* -->
+
+    <!-- Red needle -->
+    <Component ID="lx_s100_vario_needle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>lx_s100_vario_needle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>30</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_VARIO_LX_CLIMB_NEEDLE, number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Green needle -->
+    <Component ID="lx_s100_stf_needle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>lx_s100_stf_needle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>20</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_VARIO_LX_STF_ANIM_100,number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Maccready needle -->
+    <Component ID="lx_s100_mc_needle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>lx_s100_mc_needle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(Z:B21_VARIO_LX_MC_ANIM_100,number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Button 1 -->
+   <Component ID="lx_s100_button_1_component" Node="LX_S100_Button_1">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_s100_button_1</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_VARIO_LX_BUTTON_1,number)</ANIM_CODE>
+            <TOOLTIPID>up</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_VARIO_LX_BUTTON_1_TOGGLE,bool) ! (>Z:B21_VARIO_LX_BUTTON_1_TOGGLE, bool)
+                (Z:B21_VARIO_LX_BUTTON_1,number) 0 == if{
+                    100 (>Z:B21_VARIO_LX_BUTTON_1, number)
+                } els{
+                    0 (>Z:B21_VARIO_LX_BUTTON_1, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Button 2 -->
+   <Component ID="lx_s100_button_2_component" Node="LX_S100_Button_2">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_s100_button_2</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_VARIO_LX_BUTTON_2,number)</ANIM_CODE>
+            <TOOLTIPID>Settings/select</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_VARIO_LX_BUTTON_2_TOGGLE,bool) ! (>Z:B21_VARIO_LX_BUTTON_2_TOGGLE, bool)
+                (Z:B21_VARIO_LX_BUTTON_2,number) 0 == if{
+                    100 (>Z:B21_VARIO_LX_BUTTON_2, number)
+                } els{
+                    0 (>Z:B21_VARIO_LX_BUTTON_2, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- Button 3 -->
+   <Component ID="lx_s100_button_3_component" Node="LX_S100_Button_3">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_s100_button_3</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_VARIO_LX_BUTTON_3,number)</ANIM_CODE>
+            <TOOLTIPID>down</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_VARIO_LX_BUTTON_3_TOGGLE,bool) ! (>Z:B21_VARIO_LX_BUTTON_3_TOGGLE, bool)
+                (Z:B21_VARIO_LX_BUTTON_3,number) 0 == if{
+                    100 (>Z:B21_VARIO_LX_BUTTON_3, number)
+                } els{
+                    0 (>Z:B21_VARIO_LX_BUTTON_3, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="lx_s100_dial_1_component" Node="LX_S100_Dial_1">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_NAME>lx_s100_dial_1</ANIM_NAME>
+            <ANIM_CODE>(A:COM VOLUME:3, percent)</ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+            <WRAP>False</WRAP>
+            <ANTICLOCKWISE_CODE>(A:COM VOLUME:3, percent) 10 - 0 max (&gt;K:COM3_VOLUME_SET)</ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>(A:COM VOLUME:3, percent) 10 + 100 min (&gt;K:COM3_VOLUME_SET)</CLOCKWISE_CODE>
+            <LEFT_SINGLE_CODE>
+            </LEFT_SINGLE_CODE>
+            <TOOLTIPID>Volume %((A:COM VOLUME:3, percent))%!d!) %</TOOLTIPID>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="lx_s100_dial_2_component" Node="LX_S100_Dial_2">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_NAME>lx_s100_dial_2</ANIM_NAME>
+            <ANIM_CODE>(Z:B21_VARIO_LX_MC_ANIM_100,number) 0.75 *</ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+            <WRAP>False</WRAP>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (Z:B21_VARIO_LX_MC_DOWN_TOGGLE,bool) ! (&gt;Z:B21_VARIO_LX_MC_DOWN_TOGGLE,bool)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (Z:B21_VARIO_LX_MC_UP_TOGGLE,bool) ! (&gt;Z:B21_VARIO_LX_MC_UP_TOGGLE,bool)
+            </CLOCKWISE_CODE>
+            <LEFT_SINGLE_CODE></LEFT_SINGLE_CODE>
+            <TOOLTIPID>Maccready</TOOLTIPID>
+        </UseTemplate>
+    </Component>
+
+
+    <!-- ******************************* -->
+    <!--             RADIO               -->
+    <!-- ******************************* -->
+    <!-- Sends events                    -->
+    <!--    radio_button                 -->
+    <!--    radio_knob_l_up|down         -->
+    <!--    radio_knob_r_up|down         -->
+    <!-- ******************************* -->
+
+   <Component ID="Radio_button_component" Node="Radio_button">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>Radio_button</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_RADIO_BUTTON_100,number)</ANIM_CODE>
+            <TOOLTIPID>Swap active/standby (ADV.YAW %((Z:B21_ADVERSE_YAW_RATIO, number))%!1.2f!)</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_RADIO_BUTTON_TOGGLE,bool) ! (>Z:B21_RADIO_BUTTON_TOGGLE, bool)
+                (Z:B21_RADIO_BUTTON_100,number) 0 == if{
+                    100 (>Z:B21_RADIO_BUTTON_100, number)
+                } els{
+                    0 (>Z:B21_RADIO_BUTTON_100, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Radio_knob_L_component" Node="Radio_knob_L">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_NAME>Radio_knob_L</ANIM_NAME>
+            <ANIM_CODE>(Z:B21_RADIO_KNOB_L_100,number)</ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+            <WRAP>False</WRAP>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (Z:B21_RADIO_KNOB_L_DOWN_TOGGLE, bool) ! (&gt;Z:B21_RADIO_KNOB_L_DOWN_TOGGLE, bool)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (Z:B21_RADIO_KNOB_L_UP_TOGGLE, bool) ! (&gt;Z:B21_RADIO_KNOB_L_UP_TOGGLE, bool)
+            </CLOCKWISE_CODE>
+            <LEFT_SINGLE_CODE>
+            </LEFT_SINGLE_CODE>
+            <TOOLTIPID>MHz</TOOLTIPID>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Radio_knob_R_component" Node="Radio_knob_R">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_NAME>Radio_knob_R</ANIM_NAME>
+            <ANIM_CODE>(Z:B21_RADIO_KNOB_R_100,number)</ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+            <WRAP>False</WRAP>
+            <ANTICLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (Z:B21_RADIO_KNOB_R_DOWN_TOGGLE, bool) ! (&gt;Z:B21_RADIO_KNOB_R_DOWN_TOGGLE, bool)
+            </ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>
+                (L:SOUND_CLICK, boolean) ! (&gt;L:SOUND_CLICK, boolean)
+                (Z:B21_RADIO_KNOB_R_UP_TOGGLE, bool) ! (&gt;Z:B21_RADIO_KNOB_R_UP_TOGGLE, bool)
+            </CLOCKWISE_CODE>
+            <LEFT_SINGLE_CODE>
+            </LEFT_SINGLE_CODE>
+            <TOOLTIPID>KHz</TOOLTIPID>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--              LX ADI             -->
+    <!-- ******************************* -->
+
+    <Component ID="lx_adi_needle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>lx_adi_needle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(Z:B21_ADI_NEEDLE, number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="lx_adi_button_1_component" Node="LX_ADI_Button_1">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_adi_button_1</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_ADI_BUTTON_1,number)</ANIM_CODE>
+            <TOOLTIPID>up</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_ADI_BUTTON_1_TOGGLE, bool) ! (>Z:B21_ADI_BUTTON_1_TOGGLE,bool)
+                (Z:B21_ADI_BUTTON_1,number) 0 == if{
+                    100 (>Z:B21_ADI_BUTTON_1, number)
+                } els{
+                    0 (>Z:B21_ADI_BUTTON_1, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="lx_adi_button_2_component" Node="LX_ADI_Button_2">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_adi_button_2</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_ADI_BUTTON_2,number)</ANIM_CODE>
+            <TOOLTIPID>Settings/select</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_ADI_BUTTON_2_TOGGLE, bool) ! (>Z:B21_ADI_BUTTON_2_TOGGLE,bool)
+                (Z:B21_ADI_BUTTON_2,number) 0 == if{
+                    100 (>Z:B21_ADI_BUTTON_2, number)
+                } els{
+                    0 (>Z:B21_ADI_BUTTON_2, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="lx_adi_button_3_component" Node="LX_ADI_Button_3">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_adi_button_3</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_ADI_BUTTON_3,number)</ANIM_CODE>
+            <TOOLTIPID>down</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_ADI_BUTTON_3_TOGGLE, bool) ! (>Z:B21_ADI_BUTTON_3_TOGGLE,bool)
+                (Z:B21_ADI_BUTTON_3,number) 0 == if{
+                    100 (>Z:B21_ADI_BUTTON_3, number)
+                } els{
+                    0 (>Z:B21_ADI_BUTTON_3, number)
+                }
+
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--            MULTIGAUGE           -->
+    <!-- ******************************* -->
+
+   <Component ID="lx_flarm_button_1_component" Node="LX_Flarm_Button_1">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_flarm_button_1</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_LX_MULTIGAUGE_BUTTON_1,number)</ANIM_CODE>
+            <TOOLTIPID>Trim/up</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_LX_MULTIGAUGE_BUTTON_1_TOGGLE, bool) ! (>Z:B21_LX_MULTIGAUGE_BUTTON_1_TOGGLE,bool)
+                (Z:B21_LX_MULTIGAUGE_BUTTON_1,number) 0 == if{
+                    100 (>Z:B21_LX_MULTIGAUGE_BUTTON_1, number)
+                } els{
+                    0 (>Z:B21_LX_MULTIGAUGE_BUTTON_1, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="lx_flarm_button_2_component" Node="LX_Flarm_Button_2">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_flarm_button_2</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_LX_MULTIGAUGE_BUTTON_2,number)</ANIM_CODE>
+            <TOOLTIPID>Compass/select</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_LX_MULTIGAUGE_BUTTON_2_TOGGLE, bool) ! (>Z:B21_LX_MULTIGAUGE_BUTTON_2_TOGGLE,bool)
+                (Z:B21_LX_MULTIGAUGE_BUTTON_2,number) 0 == if{
+                    100 (>Z:B21_LX_MULTIGAUGE_BUTTON_2, number)
+                } els{
+                    0 (>Z:B21_LX_MULTIGAUGE_BUTTON_2, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="lx_flarm_button_3_component" Node="LX_Flarm_Button_3">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>lx_flarm_button_3</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_LX_MULTIGAUGE_BUTTON_3,number)</ANIM_CODE>
+            <TOOLTIPID>Ballast/down</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:B21_LX_MULTIGAUGE_BUTTON_3_TOGGLE, bool) ! (>Z:B21_LX_MULTIGAUGE_BUTTON_3_TOGGLE,bool)
+                (Z:B21_LX_MULTIGAUGE_BUTTON_3,number) 0 == if{
+                    100 (>Z:B21_LX_MULTIGAUGE_BUTTON_3, number)
+                } els{
+                    0 (>Z:B21_LX_MULTIGAUGE_BUTTON_3, number)
+                }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--              ALTIMETER          -->
+    <!-- ******************************* -->
+
+    <Component ID="gauge_altimeter_needle_1_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>gauge_altimeter_needle_1</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(Z:B21_ALTIMETER_NEEDLE_1, number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="gauge_altimeter_needle_2_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>gauge_altimeter_needle_2</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(Z:B21_ALTIMETER_NEEDLE_2, number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="gauge_altimeter_needle_3_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>gauge_altimeter_needle_3</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(Z:B21_ALTIMETER_NEEDLE_3, number)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Gauge_Altimeter_Knob_component" Node="Gauge_Altimeter_Knob">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_NAME>gauge_altimeter_dial</ANIM_NAME>
+            <ANIM_CODE>(A:KOHLSMAN SETTING MB, millibars) 20 % 5 *</ANIM_CODE>
+        </UseTemplate>
+        <UseTemplate Name="ASOBO_GT_Interaction_WheelAndContinuousLeft_LeftSingle">
+            <WRAP>False</WRAP>
+            <ANTICLOCKWISE_CODE>1 (&gt;K:KOHLSMAN_DEC) 1 (&gt;K:KOHLSMAN_DEC) 1 (&gt;K:KOHLSMAN_DEC)</ANTICLOCKWISE_CODE>
+            <CLOCKWISE_CODE>1 (&gt;K:KOHLSMAN_INC) 1 (&gt;K:KOHLSMAN_INC) 1 (&gt;K:KOHLSMAN_INC)</CLOCKWISE_CODE>
+            <LEFT_SINGLE_CODE>
+            </LEFT_SINGLE_CODE>
+            <TOOLTIPID>BARO %((A:KOHLSMAN SETTING MB:1, Millibars))%!4.0f!</TOOLTIPID>
+        </UseTemplate>
+    </Component>
+
+
+    <!-- ******************************* -->
+    <!--       TOW RELEASE HANDLE        -->
+    <!-- ******************************* -->
+
+   <Component ID="tow_release_handle_component" Node="Tow_Release">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>tow_release_handle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>100</ANIM_LAG>
+            <ANIM_CODE>(Z:B21_TOW_RELEASE, boolean) if{ 100 } els{ 0 }</ANIM_CODE>
+            <TOOLTIPID>Tow Release</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (A:TOW CONNECTION, Bool) if{ 1 (>K:TOW_PLANE_RELEASE) (L:SOUND_CABLE_RELEASED) ! (>L:SOUND_CABLE_RELEASED) }
+                els{ 1 (>K:TOW_PLANE_RELEASE) (Z:B21_TOW_RELEASE, boolean) ! (>Z:B21_TOW_RELEASE, boolean) }
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--          FLAP HANDLE            -->
+    <!-- ******************************* -->
+
+    <Component ID="flap_handle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>flap_handle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>100</ANIM_LAG>
+            <ANIM_CODE>(A:FLAPS HANDLE PERCENT, percent)</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--          SPOILERS HANDLE        -->
+    <!-- ******************************* -->
+
+    <Component ID="spoiler_handle_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>spoiler_handle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:SPOILERS HANDLE POSITION, percent) 3 -</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--          LANDING GEAR HANDLE    -->
+    <!-- ******************************* -->
+
+   <Component ID="landing_gear_handle_component" Node="Gear_Knob">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>landing_gear_handle</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>100 (A:GEAR TOTAL PCT EXTENDED, percent) 100 * -</ANIM_CODE>
+            <TOOLTIPID>Gear up/down</TOOLTIPID>
+            <LEFT_SINGLE_CODE>(Z:B21_GEAR_TOGGLE,bool) ! (>Z:B21_GEAR_TOGGLE,bool)</LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--          CANOPY HANDLES         -->
+    <!-- ******************************* -->
+
+   <Component ID="canopy_handle_l_component" Node="Canopy_handle_L">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>canopy_handle_l</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>200</ANIM_LAG>
+            <ANIM_CODE>(A:CANOPY OPEN, percent over 100) 100 *</ANIM_CODE>
+            <TOOLTIPID>Canopy open/close</TOOLTIPID>
+            <LEFT_SINGLE_CODE>(A:CANOPY OPEN, boolean) ! (>A:CANOPY OPEN, boolean)</LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="canopy_handle_r_component" Node="Canopy_handle_R">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>canopy_handle_r</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>200</ANIM_LAG>
+            <ANIM_CODE>(A:CANOPY OPEN, percent over 100) 100 *</ANIM_CODE>
+            <TOOLTIPID>Canopy open/close</TOOLTIPID>
+            <LEFT_SINGLE_CODE>(A:CANOPY OPEN, boolean) ! (>A:CANOPY OPEN, boolean)</LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--       TRIM                      -->
+    <!-- ******************************* -->
+
+    <Component ID="trim_handle_action_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>trim_handle_action</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:ELEVATOR TRIM PCT, percent) 2 / 50 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--       STICK & RUDDER PEDALS     -->
+    <!-- ******************************* -->
+
+    <Component ID="Control_Stick_Pitch_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Control_Stick_Pitch</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:ELEVATOR DEFLECTION PCT, percent over 100) 50 * 50 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Control_Stick_Roll_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Control_Stick_Roll</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>
+                (Z:AS33_OVERSPEEDING) if{
+                    (A:AILERON LEFT DEFLECTION PCT, percent over 100) (Z:AS33_OVERSPEED_FLEX) +
+                } els{
+                    (A:AILERON LEFT DEFLECTION PCT, percent over 100)
+                }
+                50 * 50 +
+            </ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="rudder_pedal_left_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>rudder_pedal_left</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:RUDDER DEFLECTION PCT, number) neg 50 * 50 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="rudder_pedal_right_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>rudder_pedal_right</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:RUDDER DEFLECTION PCT, number) neg 50 * 50 +</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--     BALLAST SYSTEM SWITCHES     -->
+    <!-- ******************************* -->
+
+    <!-- EFFECTS are controlled by lights:                  -->
+    <!-- Outer: NAV LIGHTS                                  -->
+    <!-- Inner: LANDING LIGHTS                              -->
+    <!--  Tail: BEACON LIGHTS                               -->
+
+    <Component ID="Water_switch_outer_wing_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Water_switch_outer_wing</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:WATER BALLAST VALVE:1, boolean) if{ 100 } els{ 0 }</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="Water_switch_1_box_component" Node="Water_switch_1_box">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>Water_switch_1_box</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE></ANIM_CODE>
+            <TOOLTIPID>Ballast Outer</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                1 (>K:TOGGLE_WATER_BALLAST_VALVE)
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Water_switch_inner_wing_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Water_switch_inner_wing</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:WATER BALLAST VALVE:2, boolean) if{ 100 } els{ 0 }</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="Water_switch_2_box_component" Node="Water_switch_2_box">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>Water_switch_2_box</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE></ANIM_CODE>
+            <TOOLTIPID>Ballast Inner</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                2 (>K:TOGGLE_WATER_BALLAST_VALVE)
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <Component ID="Water_switch_tail_component">
+        <UseTemplate Name="ASOBO_GT_Anim">
+            <ANIM_NAME>Water_switch_tail</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE>(A:WATER BALLAST VALVE:3, boolean) if{ 100 } els{ 0 }</ANIM_CODE>
+        </UseTemplate>
+    </Component>
+
+   <Component ID="Water_switch_3_box_component" Node="Water_switch_3_box">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>Water_switch_3_box</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_CODE></ANIM_CODE>
+            <TOOLTIPID>Ballast Tail</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                3 (>K:TOGGLE_WATER_BALLAST_VALVE)
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--     POWER SWITCH                -->
+    <!-- ******************************* -->
+
+   <Component ID="Power_Switch_component" Node="Power_Switch">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>Power_Switch</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>300</ANIM_LAG>
+            <ANIM_CODE>(A:ELECTRICAL MASTER BATTERY, boolean) if{ 0 } els{ 100 }</ANIM_CODE>
+            <TOOLTIPID>Main battery power</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (A:ELECTRICAL MASTER BATTERY, boolean) ! (>A:ELECTRICAL MASTER BATTERY, boolean)
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    <!-- ******************************* -->
+    <!--     PILOT HIDE BUTTON           -->
+    <!-- ******************************* -->
+
+   <Component ID="Pilot_0_component" Node="Pilot_0">
+        <UseTemplate Name="ASOBO_GT_Switch_Code">
+            <ANIM_NAME>Pilot_0</ANIM_NAME>
+            <ANIM_LENGTH>100</ANIM_LENGTH>
+            <ANIM_LAG>500</ANIM_LAG>
+            <ANIM_CODE>(Z:PILOT_HIDE, boolean) if{ 100 } els{ 0 }</ANIM_CODE>
+            <TOOLTIPID>Pilot Show/Hide</TOOLTIPID>
+            <LEFT_SINGLE_CODE>
+                (L:SOUND_CLICK, boolean) ! (>L:SOUND_CLICK, boolean)
+                (Z:PILOT_HIDE_CLICKED, boolean) ! (>Z:PILOT_HIDE_CLICKED, boolean)
+            </LEFT_SINGLE_CODE>
+        </UseTemplate>
+    </Component>
+
+    </Behaviours>
+</ModelInfo>
